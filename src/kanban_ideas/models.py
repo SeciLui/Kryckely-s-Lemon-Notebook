@@ -413,6 +413,7 @@ class Idea:
             "test_runs": [run.to_dict() for run in self.test_runs],
             "tests_total": self.tests_total,
             "tests_by_context": self.tests_by_context,
+            "signals_summary": self.signals_summary,
             "effectiveness_score": self.effectiveness_score,
             "decision": self.decision,
             "rationale": self.rationale,
@@ -484,6 +485,32 @@ class Idea:
 
         raw_score = outcome_avg * 18 + laugh_bonus + relance_bonus - awkward_avg * 10
         return max(0, min(100, int(round(raw_score))))
+
+    @property
+    def signals_summary(self) -> Dict[str, float]:
+        if not self.test_runs:
+            return {
+                "smile": 0,
+                "laugh": 0,
+                "relance": 0,
+                "fluidite_avg": 0.0,
+                "awkward_avg": 0.0,
+            }
+
+        runs_count = len(self.test_runs)
+        smile_total = sum(run.signals.smile for run in self.test_runs)
+        laugh_total = sum(run.signals.laugh for run in self.test_runs)
+        relance_total = sum(run.signals.relance for run in self.test_runs)
+        fluidite_avg = sum(run.signals.fluidite for run in self.test_runs) / runs_count
+        awkward_avg = sum(run.signals.awkward for run in self.test_runs) / runs_count
+
+        return {
+            "smile": int(smile_total),
+            "laugh": int(laugh_total),
+            "relance": int(relance_total),
+            "fluidite_avg": float(round(fluidite_avg, 2)),
+            "awkward_avg": float(round(awkward_avg, 2)),
+        }
 
     def iter_test_runs(self) -> Iterable[TestRun]:
         """Yield each stored test run."""

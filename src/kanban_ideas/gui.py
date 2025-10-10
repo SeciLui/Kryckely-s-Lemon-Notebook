@@ -72,6 +72,7 @@ class KanbanIdeasApp(tk.Tk):
         self.summary_tests_total = tk.StringVar(value="0 test")
         self.summary_tests_contexts = tk.StringVar(value="")
         self.summary_effectiveness = tk.StringVar(value="0")
+        self.summary_signals = tk.StringVar(value="—")
         self.summary_decision = tk.StringVar(value="")
         self.summary_next_actions = tk.StringVar(value="")
 
@@ -467,14 +468,19 @@ class KanbanIdeasApp(tk.Tk):
             row=2, column=1, sticky="w"
         )
 
-        ttk.Label(summary, text="Décision:", width=18).grid(row=3, column=0, sticky="w")
-        ttk.Label(summary, textvariable=self.summary_decision).grid(
+        ttk.Label(summary, text="Signaux:", width=18).grid(row=3, column=0, sticky="w")
+        ttk.Label(summary, textvariable=self.summary_signals, justify=tk.LEFT).grid(
             row=3, column=1, sticky="w"
         )
 
-        ttk.Label(summary, text="Next actions:", width=18).grid(row=4, column=0, sticky="nw")
-        ttk.Label(summary, textvariable=self.summary_next_actions, justify=tk.LEFT).grid(
+        ttk.Label(summary, text="Décision:", width=18).grid(row=4, column=0, sticky="w")
+        ttk.Label(summary, textvariable=self.summary_decision).grid(
             row=4, column=1, sticky="w"
+        )
+
+        ttk.Label(summary, text="Next actions:", width=18).grid(row=5, column=0, sticky="nw")
+        ttk.Label(summary, textvariable=self.summary_next_actions, justify=tk.LEFT).grid(
+            row=5, column=1, sticky="w"
         )
 
         summary.grid_columnconfigure(1, weight=1)
@@ -930,6 +936,7 @@ class KanbanIdeasApp(tk.Tk):
         self.summary_tests_contexts.set(contexts)
 
         self.summary_effectiveness.set(f"{idea.effectiveness_score}/100")
+        self.summary_signals.set(self._format_summary_signals(idea))
         self.summary_decision.set(idea.decision or "—")
 
         if idea.next_actions:
@@ -1013,6 +1020,19 @@ class KanbanIdeasApp(tk.Tk):
             f"↩️ {signals.relance}  "
             f"🎚️ {signals.fluidite}/5  "
             f"😬 {signals.awkward}/5"
+        )
+
+    def _format_summary_signals(self, idea: Idea) -> str:
+        if not idea.test_runs:
+            return "—"
+
+        summary = idea.signals_summary
+        return (
+            f"😊 {int(summary['smile'])}  "
+            f"😂 {int(summary['laugh'])}  "
+            f"↩️ {int(summary['relance'])}  "
+            f"🎚️ {summary['fluidite_avg']:.1f}/5  "
+            f"😬 {summary['awkward_avg']:.1f}/5"
         )
 
     # ------------------------------------------------------------------
