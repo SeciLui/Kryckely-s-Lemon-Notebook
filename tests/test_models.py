@@ -159,6 +159,36 @@ class IdeaModelSpecTest(unittest.TestCase):
         )
         self.assertEqual(len(best_of.example_dialogues), 2)
 
+    def test_spec_report_detects_missing_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            idea = Idea(
+                id="incomplete",
+                title="Idée incomplète",
+                created_at="2025-01-01T00:00:00",
+                updated_at="2025-01-01T00:00:00",
+                folder=Path(tmp),
+            )
+
+            report = idea.spec_report()
+
+            self.assertFalse(idea.is_spec_complete())
+            self.assertIn("one_liner", report["identity"].missing_fields)
+            self.assertIn("purpose", report["intention"].missing_fields)
+            self.assertIn("Au moins un contexte", report["contexts"].missing_fields)
+            self.assertIn("test_instructions", report["plan"].missing_fields)
+            self.assertIn("Aucun test enregistré", report["tests"].missing_fields)
+            self.assertIn("rationale", report["synthesis"].missing_fields)
+
+    def test_spec_report_is_complete_for_fully_defined_idea(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            idea = self._make_idea(Path(tmp))
+
+            report = idea.spec_report()
+
+            self.assertTrue(idea.is_spec_complete())
+            for section in report.values():
+                self.assertTrue(section.is_complete, section.name)
+
 
 if __name__ == "__main__":
     unittest.main()

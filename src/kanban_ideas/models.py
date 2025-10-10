@@ -30,6 +30,30 @@ MAX_NEXT_ACTIONS: int = 3
 MAX_EXAMPLE_DIALOGUES: int = 2
 
 
+@dataclass(slots=True)
+class SpecSectionReport:
+    """Represent the completion state of one cahier-des-charges section."""
+
+    name: str
+    missing_fields: List[str] = field(default_factory=list)
+
+    @property
+    def is_complete(self) -> bool:
+        """Return ``True`` when no field is missing in the section."""
+
+        return not self.missing_fields
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialise the report to a JSON-friendly structure."""
+
+        return {
+            "name": self.name,
+            "is_complete": self.is_complete,
+            "missing_fields": list(self.missing_fields),
+        }
+
+
+
 def _clean_str_list(values: Iterable[Any], *, limit: int | None = None) -> List[str]:
     """Return a list of non-empty strings stripped from *values*.
 
@@ -543,6 +567,130 @@ class Idea:
         """Yield each stored test run."""
 
         return iter(self.test_runs)
+
+    # Spec compliance ----------------------------------------------------
+    def spec_report(self) -> Dict[str, SpecSectionReport]:
+        """Return a report describing how the idea fits the cahier des charges."""
+
+        def section(name: str, checks: Iterable[tuple[str, bool]]) -> SpecSectionReport:
+            missing = [label for label, ok in checks if not ok]
+            return SpecSectionReport(name=name, missing_fields=missing)
+
+        report: Dict[str, SpecSectionReport] = {}
+
+        report["identity"] = section(
+            "Identité & statut",
+            [
+                ("id", bool(self.id)),
+                ("title", bool(self.title)),
+                ("one_liner", bool(self.one_liner)),
+                ("status", bool(self.status)),
+                ("category", bool(self.category)),
+                ("tags (≥3)", len(self.tags) >= 3),
+                ("created_at", bool(self.created_at)),
+                ("updated_at", bool(self.updated_at)),
+            ],
+        )
+
+        report["intention"] = section(
+            "Intention & hypothèse",
+            [
+                ("purpose", bool(self.purpose)),
+                ("audience_hint", bool(self.audience_hint)),
+                ("success_criteria", bool(self.success_criteria)),
+                ("risks", bool(self.risks)),
+            ],
+        )
+
+        context_missing: List[str] = []
+        if not self.contexts:
+            context_missing.append("Au moins un contexte")
+        else:
+            for index, context in enumerate(self.contexts, start=1):
+                fields: List[str] = []
+                if not context.label:
+                    fields.append("label")
+                if not context.channel:
+                    fields.append("channel")
+                if fields:
+                    context_missing.append(
+                        f"contexte #{index}: {', '.join(fields)}"
+                    )
+        report["contexts"] = SpecSectionReport(
+            name="Contexte d’usage", missing_fields=context_missing
+        )
+
+        report["plan"] = section(
+            "Plan de test",
+            [
+                ("test_instructions", bool(self.test_instructions)),
+                ("next_test_context", bool(self.next_test_context)),
+                ("priority", bool(self.priority)),
+            ],
+        )
+
+        tests_missing: List[str] = []
+        if not self.test_runs:
+            tests_missing.append("Aucun test enregistré")
+        else:
+            for index, run in enumerate(self.test_runs, start=1):
+                run_checks = [
+                    ("date", bool(run.date)),
+                    ("mode", bool(run.mode)),
+                    ("context_ref", bool(run.context_ref)),
+                ]
+                missing = [label for label, ok in run_checks if not ok]
+                if missing:
+                    tests_missing.append(
+                        f"essai #{index}: {', '.join(missing)}"
+                    )
+        report["tests"] = SpecSectionReport(
+            name="Exécutions de test", missing_fields=tests_missing
+        )
+
+        report["synthesis"] = section(
+            "Synthèse & décision",
+            [
+                ("decision", bool(self.decision)),
+                ("rationale", bool(self.rationale)),
+                ("next_actions (≥1)", len(self.next_actions) >= 1),
+            ],
+        )
+
+        report["versioning"] = section(
+            "Versioning",
+            [
+                ("version", self.version >= 1),
+                ("changelog", bool(self.changelog)),
+            ],
+        )
+
+        include_best_of = self.status == "Best-of" or any(
+            [
+                self.best_of.final_wording,
+                self.best_of.delivery_tips,
+                self.best_of.example_dialogues,
+            ]
+        )
+        if include_best_of:
+            report["best_of"] = section(
+                "Best-of",
+                [
+                    ("final_wording", bool(self.best_of.final_wording)),
+                    ("delivery_tips", bool(self.best_of.delivery_tips)),
+                    (
+                        "example_dialogues",
+                        bool(self.best_of.example_dialogues),
+                    ),
+                ],
+            )
+
+        return report
+
+    def is_spec_complete(self) -> bool:
+        """Return ``True`` when all spec sections are complete."""
+
+        return all(section.is_complete for section in self.spec_report().values())
 
     # Internal helpers ---------------------------------------------------
     def _ensure_valid_state(self) -> None:
