@@ -24,15 +24,34 @@ TEST_RUN_MODES: tuple[str, ...] = (
 )
 CONTEXT_CHANNELS: tuple[str, ...] = ("IRL", "scène", "audio", "vidéo", "chat")
 
+MAX_CONTEXTS: int = 3
+MAX_TAGS: int = 6
+MAX_NEXT_ACTIONS: int = 3
+MAX_EXAMPLE_DIALOGUES: int = 2
 
-def _clean_str_list(values: Iterable[Any]) -> List[str]:
-    """Return a list of non-empty strings stripped from *values*."""
+
+def _clean_str_list(values: Iterable[Any], *, limit: int | None = None) -> List[str]:
+    """Return a list of non-empty strings stripped from *values*.
+
+    Parameters
+    ----------
+    values:
+        Any iterable producing raw values to coerce to strings.
+    limit:
+        Optional maximum number of entries to keep. When provided, the
+        resulting list is truncated to ``limit`` items. This is useful for the
+        fields where the product requirements explicitly mention an upper
+        bound (e.g. « ≤3 contextes », « 3–6 tags », « 1–3 next actions »).
+    """
 
     cleaned: List[str] = []
     for item in values:
         text = str(item).strip()
-        if text:
-            cleaned.append(text)
+        if not text:
+            continue
+        cleaned.append(text)
+        if limit is not None and len(cleaned) >= limit:
+            break
     return cleaned
 
 
@@ -228,7 +247,9 @@ class IdeaBestOf:
         self.delivery_tips = _clean_str_list(self.delivery_tips)
         self.do_use_when = _clean_str_list(self.do_use_when)
         self.avoid_when = _clean_str_list(self.avoid_when)
-        self.example_dialogues = _clean_str_list(self.example_dialogues)
+        self.example_dialogues = _clean_str_list(
+            self.example_dialogues, limit=MAX_EXAMPLE_DIALOGUES
+        )
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any] | None) -> "IdeaBestOf":
@@ -532,7 +553,7 @@ class Idea:
         self.status = _normalise_choice(self.status, config.STATUSES, "Inbox")
         self.one_liner = self.one_liner.strip()
         self.category = self.category.strip()
-        self.tags = _clean_str_list(self.tags)
+        self.tags = _clean_str_list(self.tags, limit=MAX_TAGS)
         self.purpose = self.purpose.strip()
         self.audience_hint = self.audience_hint.strip()
         self.success_criteria = self.success_criteria.strip()
@@ -543,7 +564,7 @@ class Idea:
                 normalized_contexts.append(IdeaContext.from_dict(context.to_dict()))
             else:
                 normalized_contexts.append(IdeaContext.from_dict(context))
-        self.contexts = normalized_contexts
+        self.contexts = normalized_contexts[:MAX_CONTEXTS]
         self.test_instructions = self.test_instructions.strip()
         self.next_test_context = self.next_test_context.strip()
         self.priority = _normalise_choice(self.priority, PRIORITIES, PRIORITIES[0])
@@ -556,7 +577,7 @@ class Idea:
         self.test_runs = normalized_runs
         self.decision = _normalise_choice(self.decision, IDEA_DECISIONS, IDEA_DECISIONS[0])
         self.rationale = self.rationale.strip()
-        self.next_actions = _clean_str_list(self.next_actions)
+        self.next_actions = _clean_str_list(self.next_actions, limit=MAX_NEXT_ACTIONS)
         if not isinstance(self.best_of, IdeaBestOf):
             self.best_of = IdeaBestOf.from_dict(self.best_of)
         else:

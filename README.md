@@ -78,7 +78,9 @@ invoke lint      # Exécute Ruff si l’outil est disponible dans la venv
 ## Fonctionnalités principales
 
 * **Gestion Kanban** : glissez mentalement vos idées entre six statuts et modifiez
-  les métadonnées (catégorie, tags, etc.).
+  les métadonnées (catégorie, tags, etc.). Les champs multi-lignes respectent les
+  bornes du cahier des charges (≤3 contextes, ≤6 tags, 1–3 next actions, 1–2
+  dialogues d’exemple).
 * **Import audio** : ajoutez un ou plusieurs fichiers audio qui seront copiés dans
   le workspace de l’idée.
 * **Transcription** : déclenchez un outil externe (configuré dans `config.py`) pour
