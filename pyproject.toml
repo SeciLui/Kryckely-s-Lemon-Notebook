@@ -3,23 +3,19 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "lesson-scribe"
+name = "kanban-ideas"
 version = "0.1.0"
-description = "Journal de leçons avec gestion audio et transcription."
+description = "Tableau Kanban Tkinter pour organiser des idées audio."
 readme = "README.md"
 authors = [{ name = "Kevin", email = "kevin@example.com" }]
 requires-python = ">=3.10"
-dependencies = [
-    "python-dotenv>=1.0",
-    "numpy>=1.23",
-    "sounddevice>=0.4",
-]
+dependencies = []
 
 [project.optional-dependencies]
 dev = ["invoke>=2.2"]
 
 [project.scripts]
-lesson-scribe = "lesson_scribe:main"
+kanban-ideas = "kanban_ideas.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
