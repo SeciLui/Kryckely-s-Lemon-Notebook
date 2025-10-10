@@ -13,6 +13,47 @@ from typing import Any, Dict, Iterable, List
 from . import config
 
 
+PRIORITIES: tuple[str, ...] = ("low", "med", "high")
+IDEA_DECISIONS: tuple[str, ...] = ("Keep", "Tweak", "Kill")
+TEST_RUN_DECISIONS: tuple[str, ...] = ("keep", "tweak", "kill")
+TEST_RUN_MODES: tuple[str, ...] = (
+    "solo (répétition)",
+    "sim (IA)",
+    "live (IRL)",
+    "scène",
+)
+CONTEXT_CHANNELS: tuple[str, ...] = ("IRL", "scène", "audio", "vidéo", "chat")
+
+
+def _clean_str_list(values: Iterable[Any]) -> List[str]:
+    """Return a list of non-empty strings stripped from *values*."""
+
+    cleaned: List[str] = []
+    for item in values:
+        text = str(item).strip()
+        if text:
+            cleaned.append(text)
+    return cleaned
+
+
+def _clamp_int(value: Any, minimum: int, maximum: int, *, default: int) -> int:
+    """Clamp *value* within ``[minimum, maximum]`` returning *default* on error."""
+
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, number))
+
+
+def _normalise_choice(value: Any, allowed: Iterable[str], default: str) -> str:
+    """Return *value* if it is part of *allowed*, otherwise *default*."""
+
+    text = str(value).strip()
+    allowed_set = set(allowed)
+    return text if text in allowed_set else default
+
+
 def now_iso() -> str:
     """Return the current timestamp in ISO format (seconds precision)."""
 
@@ -34,6 +75,16 @@ class IdeaContext:
     label: str = ""
     channel: str = "IRL"
     constraints: str = ""
+
+    def __post_init__(self) -> None:
+        self.label = self.label.strip()
+        raw_channel = str(self.channel).strip()
+        if not raw_channel:
+            self.channel = "IRL"
+        else:
+            canonical_map = {option.lower(): option for option in CONTEXT_CHANNELS}
+            self.channel = canonical_map.get(raw_channel.lower(), raw_channel)
+        self.constraints = self.constraints.strip()
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any] | None) -> "IdeaContext":
@@ -61,6 +112,13 @@ class TestSignals:
     relance: int = 0
     fluidite: int = 0
     awkward: int = 0
+
+    def __post_init__(self) -> None:
+        self.smile = _clamp_int(self.smile, 0, 1, default=0)
+        self.laugh = _clamp_int(self.laugh, 0, 1, default=0)
+        self.relance = _clamp_int(self.relance, 0, 1, default=0)
+        self.fluidite = _clamp_int(self.fluidite, 0, 5, default=0)
+        self.awkward = _clamp_int(self.awkward, 0, 5, default=0)
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any] | None) -> "TestSignals":
@@ -99,6 +157,29 @@ class TestRun:
     micro_tweaks: List[str] = field(default_factory=list)
     run_decision: str = "tweak"
 
+    def __post_init__(self) -> None:
+        self.date = str(self.date).strip()
+        self.mode = _normalise_choice(self.mode, TEST_RUN_MODES, TEST_RUN_MODES[0])
+        self.context_ref = str(self.context_ref).strip()
+        self.partner_profile = str(self.partner_profile).strip()
+        self.version_used = str(self.version_used).strip() or "A"
+        self.outcome_score = _clamp_int(self.outcome_score, 0, 5, default=0)
+        if not isinstance(self.signals, TestSignals):
+            signals_payload: Dict[str, Any] = {}
+            if hasattr(self.signals, "to_dict"):
+                signals_payload = self.signals.to_dict()  # type: ignore[assignment]
+            else:
+                try:
+                    signals_payload = dict(self.signals)
+                except Exception:  # pragma: no cover - defensive fallback
+                    signals_payload = {}
+            self.signals = TestSignals.from_dict(signals_payload)
+        self.notes = str(self.notes).strip()
+        self.evidence = _clean_str_list(self.evidence)
+        self.micro_tweaks = _clean_str_list(self.micro_tweaks)
+        choice = _normalise_choice(self.run_decision.lower(), TEST_RUN_DECISIONS, "tweak")
+        self.run_decision = choice
+
     @classmethod
     def from_dict(cls, payload: Dict[str, Any] | None) -> "TestRun":
         payload = payload or {}
@@ -108,11 +189,11 @@ class TestRun:
             context_ref=str(payload.get("context_ref", "")),
             partner_profile=str(payload.get("partner_profile", "")),
             version_used=str(payload.get("version_used", "A")),
-            outcome_score=int(payload.get("outcome_score", 0)),
+            outcome_score=payload.get("outcome_score", 0),
             signals=TestSignals.from_dict(payload.get("signals", {})),
             notes=str(payload.get("notes", "")),
-            evidence=[str(item) for item in payload.get("evidence", [])],
-            micro_tweaks=[str(item) for item in payload.get("micro_tweaks", [])],
+            evidence=payload.get("evidence", []),
+            micro_tweaks=payload.get("micro_tweaks", []),
             run_decision=str(payload.get("run_decision", "tweak")),
         )
 
@@ -142,6 +223,13 @@ class IdeaBestOf:
     avoid_when: List[str] = field(default_factory=list)
     example_dialogues: List[str] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        self.final_wording = self.final_wording.strip()
+        self.delivery_tips = _clean_str_list(self.delivery_tips)
+        self.do_use_when = _clean_str_list(self.do_use_when)
+        self.avoid_when = _clean_str_list(self.avoid_when)
+        self.example_dialogues = _clean_str_list(self.example_dialogues)
+
     @classmethod
     def from_dict(cls, payload: Dict[str, Any] | None) -> "IdeaBestOf":
         payload = payload or {}
@@ -169,6 +257,10 @@ class IdeaFiles:
 
     audio: List[str] = field(default_factory=list)
     evidence: List[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.audio = _clean_str_list(self.audio)
+        self.evidence = _clean_str_list(self.evidence)
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any] | None) -> "IdeaFiles":
@@ -218,6 +310,9 @@ class Idea:
     variant_of: str = ""
     changelog: List[str] = field(default_factory=list)
     folder: Path = field(default_factory=Path)
+
+    def __post_init__(self) -> None:
+        self._ensure_valid_state()
 
     @classmethod
     def create(cls, title: str, *, base_dir: Path | None = None) -> "Idea":
@@ -333,6 +428,7 @@ class Idea:
     def save(self) -> None:
         """Persist the idea metadata to disk."""
 
+        self._ensure_valid_state()
         self.updated_at = now_iso()
         idea_json = self.folder / "idea.json"
         idea_json.parent.mkdir(parents=True, exist_ok=True)
@@ -393,3 +489,51 @@ class Idea:
         """Yield each stored test run."""
 
         return iter(self.test_runs)
+
+    # Internal helpers ---------------------------------------------------
+    def _ensure_valid_state(self) -> None:
+        self.id = str(self.id).strip()
+        self.title = self.title.strip()
+        self.created_at = str(self.created_at).strip()
+        self.updated_at = str(self.updated_at).strip()
+        self.status = _normalise_choice(self.status, config.STATUSES, "Inbox")
+        self.one_liner = self.one_liner.strip()
+        self.category = self.category.strip()
+        self.tags = _clean_str_list(self.tags)
+        self.purpose = self.purpose.strip()
+        self.audience_hint = self.audience_hint.strip()
+        self.success_criteria = self.success_criteria.strip()
+        self.risks = _clean_str_list(self.risks)
+        normalized_contexts: List[IdeaContext] = []
+        for context in self.contexts:
+            if isinstance(context, IdeaContext):
+                normalized_contexts.append(IdeaContext.from_dict(context.to_dict()))
+            else:
+                normalized_contexts.append(IdeaContext.from_dict(context))
+        self.contexts = normalized_contexts
+        self.test_instructions = self.test_instructions.strip()
+        self.next_test_context = self.next_test_context.strip()
+        self.priority = _normalise_choice(self.priority, PRIORITIES, PRIORITIES[0])
+        normalized_runs: List[TestRun] = []
+        for run in self.test_runs:
+            if isinstance(run, TestRun):
+                normalized_runs.append(TestRun.from_dict(run.to_dict()))
+            else:
+                normalized_runs.append(TestRun.from_dict(run))
+        self.test_runs = normalized_runs
+        self.decision = _normalise_choice(self.decision, IDEA_DECISIONS, IDEA_DECISIONS[0])
+        self.rationale = self.rationale.strip()
+        self.next_actions = _clean_str_list(self.next_actions)
+        if not isinstance(self.best_of, IdeaBestOf):
+            self.best_of = IdeaBestOf.from_dict(self.best_of)
+        else:
+            self.best_of = IdeaBestOf.from_dict(self.best_of.to_dict())
+        if not isinstance(self.files, IdeaFiles):
+            self.files = IdeaFiles.from_dict(self.files)
+        else:
+            self.files = IdeaFiles.from_dict(self.files.to_dict())
+        self.version = max(1, _clamp_int(self.version, 1, 10_000, default=1))
+        self.variant_of = self.variant_of.strip()
+        self.changelog = _clean_str_list(self.changelog) or ["Création de l'idée."]
+        if not isinstance(self.folder, Path):
+            self.folder = Path(self.folder)
