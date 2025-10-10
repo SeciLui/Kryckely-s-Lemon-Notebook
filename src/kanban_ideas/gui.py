@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import queue
 import shutil
 import threading
@@ -320,6 +321,14 @@ class KanbanIdeasApp(tk.Tk):
         tests_frame = ttk.Frame(detail_notebook, padding=6)
         detail_notebook.add(tests_frame, text="Tests")
 
+        tests_toolbar = ttk.Frame(tests_frame)
+        tests_toolbar.pack(fill=tk.X, pady=(0, 6))
+        ttk.Button(
+            tests_toolbar,
+            text="➕ Ajouter un test",
+            command=self._add_test_run,
+        ).pack(side=tk.LEFT)
+
         tests_table = ttk.Frame(tests_frame)
         tests_table.pack(fill=tk.BOTH, expand=True)
 
@@ -633,6 +642,159 @@ class KanbanIdeasApp(tk.Tk):
             dialog.destroy()
 
         ttk.Button(dialog, text="Créer", command=create).pack(pady=10)
+
+    def _add_test_run(self) -> None:
+        if not self.selected_idea:
+            self._set_status("Sélectionne une idée d’abord.")
+            return
+
+        idea = self.selected_idea
+        dialog = tk.Toplevel(self)
+        dialog.title("Ajouter un test")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        frame = ttk.Frame(dialog, padding=10)
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        now_iso = dt.datetime.now().isoformat(timespec="minutes")
+        date_var = tk.StringVar(value=now_iso)
+        ttk.Label(frame, text="Date (ISO):").grid(row=0, column=0, sticky="e")
+        ttk.Entry(frame, textvariable=date_var, width=30).grid(
+            row=0, column=1, sticky="we", padx=4, pady=2
+        )
+
+        mode_var = tk.StringVar(value="live (IRL)")
+        ttk.Label(frame, text="Mode:").grid(row=1, column=0, sticky="e")
+        ttk.Combobox(
+            frame,
+            values=["solo (répétition)", "sim (IA)", "live (IRL)", "scène"],
+            textvariable=mode_var,
+            state="readonly",
+        ).grid(row=1, column=1, sticky="w", padx=4, pady=2)
+
+        context_labels = [ctx.label for ctx in idea.contexts if ctx.label]
+        context_var = tk.StringVar(value=context_labels[0] if context_labels else "")
+        ttk.Label(frame, text="Contexte:").grid(row=2, column=0, sticky="e")
+        context_combo = ttk.Combobox(
+            frame,
+            values=context_labels,
+            textvariable=context_var,
+        )
+        context_combo.grid(row=2, column=1, sticky="we", padx=4, pady=2)
+
+        partner_var = tk.StringVar()
+        ttk.Label(frame, text="Profil partenaire:").grid(row=3, column=0, sticky="e")
+        ttk.Entry(frame, textvariable=partner_var, width=30).grid(
+            row=3, column=1, sticky="we", padx=4, pady=2
+        )
+
+        version_var = tk.StringVar(value="A")
+        ttk.Label(frame, text="Version utilisée:").grid(row=4, column=0, sticky="e")
+        ttk.Entry(frame, textvariable=version_var, width=10).grid(
+            row=4, column=1, sticky="w", padx=4, pady=2
+        )
+
+        outcome_var = tk.IntVar(value=3)
+        ttk.Label(frame, text="Score (0-5):").grid(row=5, column=0, sticky="e")
+        tk.Spinbox(frame, from_=0, to=5, textvariable=outcome_var, width=5).grid(
+            row=5, column=1, sticky="w", padx=4, pady=2
+        )
+
+        ttk.Label(frame, text="Signaux:").grid(row=6, column=0, sticky="ne")
+        signals_frame = ttk.Frame(frame)
+        signals_frame.grid(row=6, column=1, sticky="w", padx=4, pady=2)
+
+        smile_var = tk.IntVar(value=1)
+        laugh_var = tk.IntVar(value=0)
+        relance_var = tk.IntVar(value=0)
+        fluidite_var = tk.IntVar(value=3)
+        awkward_var = tk.IntVar(value=1)
+
+        tk.Label(signals_frame, text="😊").grid(row=0, column=0)
+        tk.Spinbox(signals_frame, from_=0, to=1, width=3, textvariable=smile_var).grid(
+            row=0, column=1, padx=(2, 8)
+        )
+        tk.Label(signals_frame, text="😂").grid(row=0, column=2)
+        tk.Spinbox(signals_frame, from_=0, to=1, width=3, textvariable=laugh_var).grid(
+            row=0, column=3, padx=(2, 8)
+        )
+        tk.Label(signals_frame, text="↩️").grid(row=0, column=4)
+        tk.Spinbox(signals_frame, from_=0, to=1, width=3, textvariable=relance_var).grid(
+            row=0, column=5, padx=(2, 8)
+        )
+        tk.Label(signals_frame, text="🎚️").grid(row=0, column=6)
+        tk.Spinbox(signals_frame, from_=0, to=5, width=3, textvariable=fluidite_var).grid(
+            row=0, column=7, padx=(2, 8)
+        )
+        tk.Label(signals_frame, text="😬").grid(row=0, column=8)
+        tk.Spinbox(signals_frame, from_=0, to=5, width=3, textvariable=awkward_var).grid(
+            row=0, column=9, padx=(2, 0)
+        )
+
+        ttk.Label(frame, text="Notes:").grid(row=7, column=0, sticky="ne")
+        notes_text = tk.Text(frame, height=4, width=40, wrap="word")
+        notes_text.grid(row=7, column=1, sticky="we", padx=4, pady=2)
+
+        ttk.Label(frame, text="Micro-tweaks (1/ligne):").grid(row=8, column=0, sticky="ne")
+        tweaks_text = tk.Text(frame, height=3, width=40, wrap="word")
+        tweaks_text.grid(row=8, column=1, sticky="we", padx=4, pady=2)
+
+        ttk.Label(frame, text="Evidence (1/ligne):").grid(row=9, column=0, sticky="ne")
+        evidence_text = tk.Text(frame, height=3, width=40, wrap="word")
+        evidence_text.grid(row=9, column=1, sticky="we", padx=4, pady=2)
+
+        decision_var = tk.StringVar(value="tweak")
+        ttk.Label(frame, text="Décision run:").grid(row=10, column=0, sticky="e")
+        ttk.Combobox(
+            frame,
+            values=["keep", "tweak", "kill"],
+            textvariable=decision_var,
+            state="readonly",
+        ).grid(row=10, column=1, sticky="w", padx=4, pady=2)
+
+        def _clean_lines(widget: tk.Text) -> List[str]:
+            raw = widget.get("1.0", tk.END)
+            return [line.strip() for line in raw.splitlines() if line.strip()]
+
+        def submit() -> None:
+            date_val = date_var.get().strip() or dt.datetime.now().isoformat(timespec="minutes")
+            context_val = context_var.get().strip()
+            outcome = max(0, min(5, int(outcome_var.get())))
+            signals = TestSignals(
+                smile=max(0, min(1, int(smile_var.get()))),
+                laugh=max(0, min(1, int(laugh_var.get()))),
+                relance=max(0, min(1, int(relance_var.get()))),
+                fluidite=max(0, min(5, int(fluidite_var.get()))),
+                awkward=max(0, min(5, int(awkward_var.get()))),
+            )
+            run = TestRun(
+                date=date_val,
+                mode=mode_var.get().strip(),
+                context_ref=context_val,
+                partner_profile=partner_var.get().strip(),
+                version_used=version_var.get().strip() or "A",
+                outcome_score=outcome,
+                signals=signals,
+                notes=notes_text.get("1.0", tk.END).strip(),
+                evidence=_clean_lines(evidence_text),
+                micro_tweaks=_clean_lines(tweaks_text),
+                run_decision=decision_var.get().strip() or "tweak",
+            )
+            idea.test_runs.append(run)
+            idea.changelog.append(f"Ajout test {date_val}")
+            idea.save()
+            self._load_data()
+            self._set_status("Test ajouté ✅")
+            dialog.destroy()
+
+        buttons = ttk.Frame(frame)
+        buttons.grid(row=11, column=0, columnspan=2, pady=(10, 0))
+        ttk.Button(buttons, text="Annuler", command=dialog.destroy).pack(side=tk.RIGHT, padx=4)
+        ttk.Button(buttons, text="Ajouter", command=submit).pack(side=tk.RIGHT)
+
+        frame.grid_columnconfigure(1, weight=1)
+        dialog.wait_window(dialog)
 
     def _add_audio(self) -> None:
         if not self.selected_idea:
