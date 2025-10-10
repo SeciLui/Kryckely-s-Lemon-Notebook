@@ -59,6 +59,7 @@ class KanbanIdeasApp(tk.Tk):
         self.text_do_use_when: tk.Text | None = None
         self.text_avoid_when: tk.Text | None = None
         self.text_example_dialogues: tk.Text | None = None
+        self.text_files_evidence: tk.Text | None = None
         self.summary_tests_total = tk.StringVar(value="0 test")
         self.summary_tests_contexts = tk.StringVar(value="")
         self.summary_effectiveness = tk.StringVar(value="0")
@@ -318,6 +319,17 @@ class KanbanIdeasApp(tk.Tk):
 
         best_frame.grid_columnconfigure(1, weight=1)
 
+        files_frame = ttk.Frame(detail_notebook, padding=6)
+        detail_notebook.add(files_frame, text="Pièces jointes")
+
+        ttk.Label(files_frame, text="Preuves / liens (1/ligne):").grid(
+            row=0, column=0, sticky="ne"
+        )
+        self.text_files_evidence = tk.Text(files_frame, height=6, wrap="word")
+        self.text_files_evidence.grid(row=0, column=1, sticky="we", padx=4, pady=2)
+
+        files_frame.grid_columnconfigure(1, weight=1)
+
         tests_frame = ttk.Frame(detail_notebook, padding=6)
         detail_notebook.add(tests_frame, text="Tests")
 
@@ -567,6 +579,7 @@ class KanbanIdeasApp(tk.Tk):
         self._set_text_widget(
             self.text_example_dialogues, "\n".join(idea.best_of.example_dialogues)
         )
+        self._set_text_widget(self.text_files_evidence, "\n".join(idea.files.evidence))
 
         self._populate_tests_tab(idea)
         self._update_summary_panel(idea)
@@ -602,6 +615,7 @@ class KanbanIdeasApp(tk.Tk):
         idea.best_of.do_use_when = self._text_to_list(self.text_do_use_when)
         idea.best_of.avoid_when = self._text_to_list(self.text_avoid_when)
         idea.best_of.example_dialogues = self._text_to_list(self.text_example_dialogues)
+        idea.files.evidence = self._text_to_list(self.text_files_evidence)
 
         idea.version = max(1, int(self.detail_version.get() or 1))
         idea.variant_of = self.detail_variant_of.get().strip()
