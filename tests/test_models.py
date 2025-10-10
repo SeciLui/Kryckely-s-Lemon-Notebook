@@ -179,6 +179,23 @@ class IdeaModelSpecTest(unittest.TestCase):
             self.assertIn("Aucun test enregistré", report["tests"].missing_fields)
             self.assertIn("rationale", report["synthesis"].missing_fields)
 
+    def test_spec_report_requires_context_constraints(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            idea = Idea(
+                id="needs-constraints",
+                title="Idée",
+                created_at="2025-01-01T00:00:00",
+                updated_at="2025-01-01T00:00:00",
+                contexts=[
+                    IdeaContext(label="date", channel="IRL", constraints=""),
+                ],
+                folder=Path(tmp),
+            )
+
+            report = idea.spec_report()
+
+            self.assertIn("contexte #1: constraints", report["contexts"].missing_fields)
+
     def test_best_of_section_requires_all_fields(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             idea = Idea(
