@@ -1,49 +1,59 @@
-# Lesson Scribe
+# Kanban Ideas
 
-Lesson Scribe est une application de bureau Tkinter pensée pour consigner des leçons
-et conserver leurs journaux, pièces audio et transcriptions. Le logiciel met l’accent
-sur la simplicité : chaque entrée correspond à une leçon, avec sa date, ses horaires,
-sa durée et un journal libre qui peut être enrichi automatiquement par la
-transcription d’un audio.
+Kanban Ideas est une application de bureau Tkinter pensée pour organiser, tester et
+archiver des idées créatives. Chaque idée vit dans un dossier dédié qui peut contenir
+plusieurs fichiers audio, une transcription et vos propres notes d’analyse.
+
+L’interface propose un tableau Kanban avec six colonnes (« Inbox », « À tester »,
+« En test », « À analyser », « Best-of », « Kill ») ainsi qu’un panneau de détails
+pour modifier les métadonnées, lancer une transcription via un outil CLI externe et
+stocker manuellement vos analyses.
 
 ## Structure du projet
 
 ```
 .
-├── pyproject.toml       # Métadonnées du projet et entrée console `lesson-scribe`
-├── requirements.txt     # Dépendances minimales (audio + .env)
+├── pyproject.toml       # Métadonnées du projet et entrée console `kanban-ideas`
+├── requirements.txt     # Dépendances (facultatif)
 ├── tasks.py             # Tâches Invoke pour installer et lancer l’app
+├── data/
+│   └── ideas/           # Workspace persistant des idées
 └── src/
-    └── lesson_scribe/
+    └── kanban_ideas/
         ├── __init__.py
-        ├── __main__.py  # Permet `python -m lesson_scribe`
-        └── app.py       # Interface Tkinter principale
+        ├── __main__.py  # Permet `python -m kanban_ideas`
+        ├── app.py       # Point d’entrée haut niveau
+        ├── config.py    # Constantes (statuts, dossiers, CLI par défaut)
+        ├── gui.py       # Interface Tkinter
+        ├── models.py    # Modèle de données `Idea`
+        ├── services.py  # Fonctions longues (transcription, sous-processus)
+        └── storage.py   # Lecture / écriture des fichiers du workspace
 ```
 
-## Structure d’un workspace
+Cette architecture sépare clairement les responsabilités (UI, modèle, persistance,
+services), ce qui facilite les évolutions futures.
 
-Lesson Scribe travaille toujours dans un dossier (workspace). Chaque workspace suit
-la hiérarchie suivante :
+## Workspace généré
+
+Chaque idée est sauvegardée dans `data/ideas/` avec la hiérarchie
+suivante :
 
 ```
 <workspace>/
-├── metadata.json                # Métadonnées globales + index des leçons
-└── lessons/
-    └── <lesson_id>/
-        ├── lesson.json          # Métadonnées de la leçon (date, durée, chemins)
-        ├── journal.txt          # Journal libre + transcription injectée
-        ├── transcript.txt       # (Optionnel) transcription brute générée par Vibe
-        └── <fichiers audio>     # Audio attaché à la leçon (copié dans le workspace)
+└── <horodatage>_<id>_<slug>/
+    ├── idea.json        # Métadonnées (titre, statut, tags, audio)
+    ├── transcript.txt   # Transcription générée par la CLI (optionnel)
+    ├── analysis.json    # Notes d’analyse écrites manuellement
+    └── audio/
+        └── *.wav|*.mp3  # Fichiers audio copiés dans le workspace
 ```
-
-Lors de la création d’un workspace, sélectionnez un dossier vide (ou confirmez que
-l’existant peut être écrasé). L’application générera automatiquement la structure et
-sauvegardera les données à chaque autosauvegarde.
 
 ## Prérequis
 
 * Python 3.10 ou supérieur
-* Pip et un environnement virtuel (recommandé)
+* Un outil de transcription CLI optionnel (ex. `vibe`, `whisper`) disponible dans le
+  `PATH` si vous souhaitez utiliser la fonction « Transcrire ».
+* (Optionnel) [Invoke](https://www.pyinvoke.org/) pour profiter des tâches automatisées.
 
 ## Installation rapide
 
@@ -51,91 +61,40 @@ sauvegardera les données à chaque autosauvegarde.
 python -m venv .venv
 source .venv/bin/activate  # Sur Windows: .venv\Scripts\activate
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+python -m pip install -r requirements.txt  # Facultatif
 pip install -e .
 ```
 
-> Astuce : `invoke install --dev` installe le projet en mode editable avec les
-> dépendances de développement.
+## Commandes Invoke
 
-## Lancement de l’application
-
-```bash
-invoke run
-```
-
-Cette commande lance `python -m lesson_scribe` grâce aux tâches définies dans
-`tasks.py`.
-
-## Configuration via fichier `.env`
-
-L’application charge automatiquement un fichier `.env` (via
-[python-dotenv](https://github.com/theskumar/python-dotenv)) au démarrage. Copiez le
-fichier `.env.example` fourni à la racine du dépôt, renommez-le en `.env` et
-ajustez les valeurs selon votre environnement :
-
-* `LESSON_SCRIBE_DEFAULT_WORKSPACE` (alias : `LESSON_DEFAULT_WORKSPACE`) : chemin
-  vers un workspace Lesson Scribe à ouvrir automatiquement.
-* `LESSON_SCRIBE_DEFAULT_TITLE` (alias : `LESSON_DEFAULT_TITLE`) : titre utilisé
-  lorsqu’une leçon est enregistrée sans titre (la date de la leçon est ajoutée).
-* `LESSON_SCRIBE_DEFAULT_TIME` (alias : `LESSON_DEFAULT_TIME`) : horaire à
-  pré-remplir lors de la création d’une leçon. Utilisez `HH:MM-HH:MM` pour une
-  plage complète ou uniquement `HH:MM` pour renseigner l’heure de début.
-* `LESSON_SCRIBE_AUDIO_DIALOG_PATH` (alias : `LESSON_AUDIO_DIALOG_PATH`) : dossier
-  ouvert par défaut lorsque vous cliquez sur « Choisir un fichier… » pour
-  sélectionner un audio.
-* `VIBE_CLI`, `VIBE_MODEL_PATH`, `VIBE_LANGUAGE`, `VIBE_THREADS`,
-  `VIBE_TEMPERATURE` : paramètres optionnels pour piloter Vibe.
-
-> Astuce : pour utiliser un autre fichier que `.env` (ex. `~/secrets/lesson.env`),
-> définissez la variable d’environnement `LESSON_SCRIBE_ENV_FILE` avant de lancer
-> l’application.
-
-## Transcription audio avec Vibe (mode local)
-
-L’application peut lancer automatiquement la transcription d’un enregistrement audio
-via [Vibe](https://github.com/thewh1teagle/vibe), un binaire CLI basé sur Whisper.
-
-### Installation de Vibe
-
-1. Téléchargez la dernière version de Vibe et placez le binaire (`vibe`,
-   `vibe.exe`, etc.) dans un dossier accessible.
-2. Téléchargez un modèle Whisper au format `.bin` et indiquez son chemin via
-   `VIBE_MODEL_PATH`.
-3. (Optionnel) ajustez `VIBE_LANGUAGE`, `VIBE_THREADS` ou `VIBE_TEMPERATURE`
-   selon votre matériel.
-
-### Fonctionnement dans Lesson Scribe
-
-* Lorsqu’un fichier audio est attaché à une leçon, il est copié dans le workspace
-  puis un worker démarre Vibe en arrière-plan.
-* La progression (0 – 100 %) est affichée dans un encart dédié avec un bouton
-  « Annuler » qui interrompt proprement la transcription.
-* La transcription générée est écrite dans `transcript.txt` et le texte est
-  injecté dans le journal libre (`journal.txt`) sous la bannière
-  `--- Transcription Vibe ---`.
-* Si Vibe n’est pas configuré, l’application affiche un avertissement et laisse la
-  leçon inchangée.
-
-## Prompt d’analyse
-
-Le bouton « Copier prompt d’analyse » rassemble toutes les leçons (journal inclus)
-au format texte et les copie dans le presse-papiers. Vous pouvez ensuite coller ce
-prompt dans l’outil de votre choix pour générer une synthèse ou un plan de
-révision.
-
-## Lint facultatif
-
-Si [Ruff](https://github.com/astral-sh/ruff) est installé dans votre environnement,
-vous pouvez exécuter :
+Les tâches se trouvent dans `tasks.py` :
 
 ```bash
-invoke lint
+invoke install   # Crée l’environnement virtuel local et installe le projet
+invoke run       # Lance l’application (équivalent à `python -m kanban_ideas`)
+invoke lint      # Exécute Ruff si l’outil est disponible dans la venv
 ```
 
-La tâche affiche un message si Ruff est absent.
+## Fonctionnalités principales
+
+* **Gestion Kanban** : glissez mentalement vos idées entre six statuts et modifiez
+  les métadonnées (catégorie, tags, etc.).
+* **Import audio** : ajoutez un ou plusieurs fichiers audio qui seront copiés dans
+  le workspace de l’idée.
+* **Transcription** : déclenchez un outil externe (configuré dans `config.py`) pour
+  transcrire le dernier audio importé.
+* **Analyse manuelle** : saisissez vos conclusions directement dans l’onglet Analyse
+  et sauvegardez-les localement (aucun appel OpenAI n’est effectué).
+* **Recherche** : filtrez les idées via la barre de recherche qui balaye titres,
+  tags, transcriptions et analyses.
+
+## Personnalisation
+
+Modifiez `TRANSCRIBE_COMMAND_TEMPLATE` dans `config.py` pour adapter la commande CLI
+à votre outil de transcription. Vous pouvez également ajuster la liste des statuts
+ou le titre de l’application dans ce même fichier.
 
 ## Tests
 
 Aucun test automatisé n’est fourni pour l’instant. Ajoutez vos propres tests sous
-`tests/` selon vos besoins.
+`tests/` si nécessaire.
