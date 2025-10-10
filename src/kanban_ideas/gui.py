@@ -13,7 +13,16 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from . import config
-from .models import Idea, IdeaContext, TestRun, TestSignals
+from .models import (
+    IDEA_DECISIONS,
+    PRIORITIES,
+    TEST_RUN_DECISIONS,
+    TEST_RUN_MODES,
+    Idea,
+    IdeaContext,
+    TestRun,
+    TestSignals,
+)
 from .services import transcribe_audio
 from .storage import load_all_ideas, read_text, write_text
 
@@ -253,7 +262,7 @@ class KanbanIdeasApp(tk.Tk):
         ttk.Label(plan_frame, text="Priorité:").grid(row=2, column=0, sticky="e")
         ttk.Combobox(
             plan_frame,
-            values=["low", "med", "high"],
+            values=list(PRIORITIES),
             textvariable=self.detail_priority,
             state="readonly",
         ).grid(row=2, column=1, sticky="w", padx=4, pady=2)
@@ -266,7 +275,7 @@ class KanbanIdeasApp(tk.Tk):
         ttk.Label(synthese_frame, text="Décision:").grid(row=0, column=0, sticky="e")
         ttk.Combobox(
             synthese_frame,
-            values=["Keep", "Tweak", "Kill"],
+            values=list(IDEA_DECISIONS),
             textvariable=self.detail_decision,
             state="readonly",
         ).grid(row=0, column=1, sticky="w", padx=4, pady=2)
@@ -682,11 +691,11 @@ class KanbanIdeasApp(tk.Tk):
             row=0, column=1, sticky="we", padx=4, pady=2
         )
 
-        mode_var = tk.StringVar(value="live (IRL)")
+        mode_var = tk.StringVar(value=TEST_RUN_MODES[2])
         ttk.Label(frame, text="Mode:").grid(row=1, column=0, sticky="e")
         ttk.Combobox(
             frame,
-            values=["solo (répétition)", "sim (IA)", "live (IRL)", "scène"],
+            values=list(TEST_RUN_MODES),
             textvariable=mode_var,
             state="readonly",
         ).grid(row=1, column=1, sticky="w", padx=4, pady=2)
@@ -762,11 +771,11 @@ class KanbanIdeasApp(tk.Tk):
         evidence_text = tk.Text(frame, height=3, width=40, wrap="word")
         evidence_text.grid(row=9, column=1, sticky="we", padx=4, pady=2)
 
-        decision_var = tk.StringVar(value="tweak")
+        decision_var = tk.StringVar(value=TEST_RUN_DECISIONS[1])
         ttk.Label(frame, text="Décision run:").grid(row=10, column=0, sticky="e")
         ttk.Combobox(
             frame,
-            values=["keep", "tweak", "kill"],
+            values=list(TEST_RUN_DECISIONS),
             textvariable=decision_var,
             state="readonly",
         ).grid(row=10, column=1, sticky="w", padx=4, pady=2)
