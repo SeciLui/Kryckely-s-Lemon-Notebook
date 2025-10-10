@@ -1026,7 +1026,7 @@ class KanbanIdeasApp(tk.Tk):
         if not idea.test_runs:
             return "—"
 
-        summary = idea.signals_summary
+        summary = idea.signals
         return (
             f"😊 {int(summary['smile'])}  "
             f"😂 {int(summary['laugh'])}  "
