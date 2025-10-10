@@ -484,7 +484,11 @@ class KanbanIdeasApp(tk.Tk):
             self.listbox_items[listbox] = []
             for idea in filtered:
                 if idea.status == status:
-                    listbox.insert(tk.END, idea.title)
+                    created_date = idea.created_at.split("T")[0] if idea.created_at else "—"
+                    tests_total = idea.tests_total
+                    badge = f"[{tests_total}]" if tests_total else "[0]"
+                    display = f"{idea.title} · {created_date} {badge}".strip()
+                    listbox.insert(tk.END, display)
                     self.listbox_items[listbox].append(idea.id)
 
     def _filter_ideas(self, ideas: Iterable[Idea]) -> List[Idea]:
