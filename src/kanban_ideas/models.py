@@ -612,6 +612,8 @@ class Idea:
                     fields.append("label")
                 if not context.channel:
                     fields.append("channel")
+                if not context.constraints:
+                    fields.append("constraints")
                 if fields:
                     context_missing.append(
                         f"contexte #{index}: {', '.join(fields)}"
