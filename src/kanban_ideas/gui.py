@@ -12,7 +12,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from . import config
-from .models import Idea, IdeaContext
+from .models import Idea, IdeaContext, TestRun, TestSignals
 from .services import transcribe_audio
 from .storage import load_all_ideas, read_text, write_text
 
@@ -63,6 +63,16 @@ class KanbanIdeasApp(tk.Tk):
         self.summary_effectiveness = tk.StringVar(value="0")
         self.summary_decision = tk.StringVar(value="")
         self.summary_next_actions = tk.StringVar(value="")
+
+        self.tests_tree: ttk.Treeview | None = None
+        self.test_detail_partner = tk.StringVar(value="—")
+        self.test_detail_version = tk.StringVar(value="—")
+        self.test_detail_outcome = tk.StringVar(value="—")
+        self.test_detail_signals = tk.StringVar(value="—")
+        self.test_detail_run_decision = tk.StringVar(value="—")
+        self.test_detail_notes: tk.Text | None = None
+        self.test_detail_micro_tweaks: tk.Text | None = None
+        self.test_detail_evidence: tk.Text | None = None
 
         self.queue: "queue.Queue[tuple[str, object]]" = queue.Queue()
 
@@ -307,6 +317,95 @@ class KanbanIdeasApp(tk.Tk):
 
         best_frame.grid_columnconfigure(1, weight=1)
 
+        tests_frame = ttk.Frame(detail_notebook, padding=6)
+        detail_notebook.add(tests_frame, text="Tests")
+
+        tests_table = ttk.Frame(tests_frame)
+        tests_table.pack(fill=tk.BOTH, expand=True)
+
+        columns = ("date", "mode", "context", "score", "signals", "decision")
+        self.tests_tree = ttk.Treeview(
+            tests_table,
+            columns=columns,
+            show="headings",
+            height=6,
+        )
+
+        headings = {
+            "date": "Date",
+            "mode": "Mode",
+            "context": "Contexte",
+            "score": "Score",
+            "signals": "Signaux",
+            "decision": "Décision",
+        }
+        widths = {
+            "date": 120,
+            "mode": 120,
+            "context": 140,
+            "score": 60,
+            "signals": 200,
+            "decision": 90,
+        }
+        for key in columns:
+            self.tests_tree.heading(key, text=headings[key])
+            self.tests_tree.column(key, width=widths[key], anchor="w")
+
+        vscroll = ttk.Scrollbar(tests_table, orient=tk.VERTICAL, command=self.tests_tree.yview)
+        self.tests_tree.configure(yscrollcommand=vscroll.set)
+
+        self.tests_tree.grid(row=0, column=0, sticky="nsew")
+        vscroll.grid(row=0, column=1, sticky="ns")
+        tests_table.grid_columnconfigure(0, weight=1)
+        tests_table.grid_rowconfigure(0, weight=1)
+
+        self.tests_tree.bind("<<TreeviewSelect>>", self._on_select_test)
+
+        tests_details = ttk.LabelFrame(tests_frame, text="Détails du test", padding=6)
+        tests_details.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
+
+        ttk.Label(tests_details, text="Partenaire:").grid(row=0, column=0, sticky="e")
+        ttk.Label(tests_details, textvariable=self.test_detail_partner).grid(
+            row=0, column=1, sticky="w"
+        )
+
+        ttk.Label(tests_details, text="Version utilisée:").grid(row=1, column=0, sticky="e")
+        ttk.Label(tests_details, textvariable=self.test_detail_version).grid(
+            row=1, column=1, sticky="w"
+        )
+
+        ttk.Label(tests_details, text="Score / décision:").grid(row=2, column=0, sticky="e")
+        ttk.Label(tests_details, textvariable=self.test_detail_outcome).grid(
+            row=2, column=1, sticky="w"
+        )
+        ttk.Label(tests_details, textvariable=self.test_detail_run_decision).grid(
+            row=2, column=2, sticky="w", padx=(6, 0)
+        )
+
+        ttk.Label(tests_details, text="Signaux:").grid(row=3, column=0, sticky="ne")
+        ttk.Label(tests_details, textvariable=self.test_detail_signals, wraplength=360).grid(
+            row=3, column=1, columnspan=2, sticky="w"
+        )
+
+        ttk.Label(tests_details, text="Notes:").grid(row=4, column=0, sticky="ne")
+        self.test_detail_notes = tk.Text(tests_details, height=4, wrap="word", state="disabled")
+        self.test_detail_notes.grid(row=4, column=1, columnspan=2, sticky="we", pady=2)
+
+        ttk.Label(tests_details, text="Micro-tweaks:").grid(row=5, column=0, sticky="ne")
+        self.test_detail_micro_tweaks = tk.Text(
+            tests_details, height=3, wrap="word", state="disabled"
+        )
+        self.test_detail_micro_tweaks.grid(row=5, column=1, columnspan=2, sticky="we", pady=2)
+
+        ttk.Label(tests_details, text="Evidence:").grid(row=6, column=0, sticky="ne")
+        self.test_detail_evidence = tk.Text(
+            tests_details, height=3, wrap="word", state="disabled"
+        )
+        self.test_detail_evidence.grid(row=6, column=1, columnspan=2, sticky="we", pady=2)
+
+        tests_details.grid_columnconfigure(1, weight=1)
+        tests_details.grid_columnconfigure(2, weight=1)
+
         preview = ttk.Notebook(right)
         preview.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
 
@@ -456,6 +555,7 @@ class KanbanIdeasApp(tk.Tk):
             self.text_example_dialogues, "\n".join(idea.best_of.example_dialogues)
         )
 
+        self._populate_tests_tab(idea)
         self._update_summary_panel(idea)
 
     # ------------------------------------------------------------------
@@ -649,6 +749,83 @@ class KanbanIdeasApp(tk.Tk):
             actions = "—"
         self.summary_next_actions.set(actions)
 
+    def _populate_tests_tab(self, idea: Idea) -> None:
+        if not self.tests_tree:
+            return
+
+        tree = self.tests_tree
+        tree.delete(*tree.get_children())
+
+        for index, run in enumerate(idea.test_runs):
+            tree.insert(
+                "",
+                "end",
+                iid=str(index),
+                values=(
+                    run.date or "—",
+                    run.mode or "—",
+                    run.context_ref or "—",
+                    run.outcome_score,
+                    self._format_signals(run.signals),
+                    run.run_decision or "—",
+                ),
+            )
+
+        if idea.test_runs:
+            first = tree.get_children()[0]
+            tree.selection_set(first)
+            tree.focus(first)
+            self._update_test_details(idea.test_runs[0])
+        else:
+            self._update_test_details(None)
+
+    def _on_select_test(self, _event: tk.Event) -> None:  # type: ignore[override]
+        if not self.selected_idea or not self.tests_tree:
+            return
+        selection = self.tests_tree.selection()
+        if not selection:
+            return
+        try:
+            index = int(selection[0])
+        except (ValueError, IndexError):
+            return
+        if 0 <= index < len(self.selected_idea.test_runs):
+            self._update_test_details(self.selected_idea.test_runs[index])
+
+    def _update_test_details(self, run: TestRun | None) -> None:
+        if run is None:
+            self.test_detail_partner.set("—")
+            self.test_detail_version.set("—")
+            self.test_detail_outcome.set("—")
+            self.test_detail_run_decision.set("—")
+            self.test_detail_signals.set("—")
+            self._set_readonly_text(self.test_detail_notes, "")
+            self._set_readonly_text(self.test_detail_micro_tweaks, "")
+            self._set_readonly_text(self.test_detail_evidence, "")
+            return
+
+        self.test_detail_partner.set(run.partner_profile or "—")
+        self.test_detail_version.set(run.version_used or "—")
+        self.test_detail_outcome.set(f"{run.outcome_score}/5")
+        self.test_detail_run_decision.set(run.run_decision or "—")
+        self.test_detail_signals.set(self._format_signals(run.signals))
+        self._set_readonly_text(self.test_detail_notes, run.notes)
+
+        micro = "\n".join(f"• {item}" for item in run.micro_tweaks) or "—"
+        self._set_readonly_text(self.test_detail_micro_tweaks, micro)
+
+        evidence = "\n".join(run.evidence) or "—"
+        self._set_readonly_text(self.test_detail_evidence, evidence)
+
+    def _format_signals(self, signals: "TestSignals") -> str:
+        return (
+            f"😊 {signals.smile}  "
+            f"😂 {signals.laugh}  "
+            f"↩️ {signals.relance}  "
+            f"🎚️ {signals.fluidite}/5  "
+            f"😬 {signals.awkward}/5"
+        )
+
     # ------------------------------------------------------------------
     # TEXT UTILITIES
     # ------------------------------------------------------------------
@@ -657,6 +834,14 @@ class KanbanIdeasApp(tk.Tk):
             return
         widget.delete("1.0", tk.END)
         widget.insert("1.0", content.strip())
+
+    def _set_readonly_text(self, widget: tk.Text | None, content: str) -> None:
+        if widget is None:
+            return
+        widget.configure(state="normal")
+        widget.delete("1.0", tk.END)
+        widget.insert("1.0", content.strip())
+        widget.configure(state="disabled")
 
     def _text_to_list(self, widget: tk.Text | None) -> List[str]:
         if widget is None:
