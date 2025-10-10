@@ -78,7 +78,12 @@ class IdeaContext:
 
     def __post_init__(self) -> None:
         self.label = self.label.strip()
-        self.channel = _normalise_choice(self.channel, CONTEXT_CHANNELS, "IRL")
+        raw_channel = str(self.channel).strip()
+        if not raw_channel:
+            self.channel = "IRL"
+        else:
+            canonical_map = {option.lower(): option for option in CONTEXT_CHANNELS}
+            self.channel = canonical_map.get(raw_channel.lower(), raw_channel)
         self.constraints = self.constraints.strip()
 
     @classmethod
