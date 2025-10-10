@@ -38,6 +38,11 @@ class KanbanIdeasApp(tk.Tk):
         self.detail_status = tk.StringVar(value=config.STATUSES[0])
         self.detail_category = tk.StringVar()
         self.detail_tags = tk.StringVar()
+        self.summary_tests_total = tk.StringVar(value="0 test")
+        self.summary_tests_contexts = tk.StringVar(value="")
+        self.summary_effectiveness = tk.StringVar(value="0")
+        self.summary_decision = tk.StringVar(value="")
+        self.summary_next_actions = tk.StringVar(value="")
 
         self.queue: "queue.Queue[tuple[str, object]]" = queue.Queue()
 
@@ -154,6 +159,40 @@ class KanbanIdeasApp(tk.Tk):
         self.analysis_text = tk.Text(preview, wrap="word", font=("TkDefaultFont", 9))
         preview.add(self.analysis_text, text="Analyse")
 
+        summary = ttk.LabelFrame(right, text="Synthèse")
+        summary.pack(fill=tk.X, pady=(8, 0))
+
+        ttk.Label(summary, text="Tests (total):", width=18).grid(row=0, column=0, sticky="w")
+        ttk.Label(summary, textvariable=self.summary_tests_total).grid(
+            row=0, column=1, sticky="w"
+        )
+
+        ttk.Label(summary, text="Tests par contexte:", width=18).grid(
+            row=1, column=0, sticky="nw"
+        )
+        ttk.Label(summary, textvariable=self.summary_tests_contexts, justify=tk.LEFT).grid(
+            row=1, column=1, sticky="w"
+        )
+
+        ttk.Label(summary, text="Score efficacité:", width=18).grid(
+            row=2, column=0, sticky="w"
+        )
+        ttk.Label(summary, textvariable=self.summary_effectiveness).grid(
+            row=2, column=1, sticky="w"
+        )
+
+        ttk.Label(summary, text="Décision:", width=18).grid(row=3, column=0, sticky="w")
+        ttk.Label(summary, textvariable=self.summary_decision).grid(
+            row=3, column=1, sticky="w"
+        )
+
+        ttk.Label(summary, text="Next actions:", width=18).grid(row=4, column=0, sticky="nw")
+        ttk.Label(summary, textvariable=self.summary_next_actions, justify=tk.LEFT).grid(
+            row=4, column=1, sticky="w"
+        )
+
+        summary.grid_columnconfigure(1, weight=1)
+
         ttk.Label(
             right,
             text="Astuce: double-clique une idée dans le Kanban pour l’ouvrir.",
@@ -237,6 +276,8 @@ class KanbanIdeasApp(tk.Tk):
         self.transcript_text.insert("1.0", read_text(idea.transcript_path()))
         self.analysis_text.delete("1.0", tk.END)
         self.analysis_text.insert("1.0", read_text(idea.analysis_path()))
+
+        self._update_summary_panel(idea)
 
     # ------------------------------------------------------------------
     # ACTIONS
@@ -386,3 +427,25 @@ class KanbanIdeasApp(tk.Tk):
     def _set_status(self, message: str) -> None:
         self.status_label.config(text=message)
         self.after(3500, lambda: self.status_label.config(text=""))
+
+    def _update_summary_panel(self, idea: Idea) -> None:
+        total = idea.tests_total
+        tests_label = "1 test" if total == 1 else f"{total} tests"
+        self.summary_tests_total.set(tests_label)
+
+        if idea.tests_by_context:
+            contexts = "\n".join(
+                f"• {label}: {count}" for label, count in sorted(idea.tests_by_context.items())
+            )
+        else:
+            contexts = "—"
+        self.summary_tests_contexts.set(contexts)
+
+        self.summary_effectiveness.set(f"{idea.effectiveness_score}/100")
+        self.summary_decision.set(idea.decision or "—")
+
+        if idea.next_actions:
+            actions = "\n".join(f"• {action}" for action in idea.next_actions)
+        else:
+            actions = "—"
+        self.summary_next_actions.set(actions)
