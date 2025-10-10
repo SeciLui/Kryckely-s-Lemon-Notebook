@@ -73,6 +73,9 @@ class KanbanIdeasApp(tk.Tk):
         self.text_avoid_when: tk.Text | None = None
         self.text_example_dialogues: tk.Text | None = None
         self.text_files_evidence: tk.Text | None = None
+        self.text_changelog: tk.Text | None = None
+        self.detail_created_at = tk.StringVar(value="—")
+        self.detail_updated_at = tk.StringVar(value="—")
         self.summary_tests_total = tk.StringVar(value="0 test")
         self.summary_tests_contexts = tk.StringVar(value="")
         self.summary_effectiveness = tk.StringVar(value="0")
@@ -344,6 +347,27 @@ class KanbanIdeasApp(tk.Tk):
 
         files_frame.grid_columnconfigure(1, weight=1)
 
+        version_frame = ttk.Frame(detail_notebook, padding=6)
+        detail_notebook.add(version_frame, text="Versioning")
+
+        ttk.Label(version_frame, text="Créée le:").grid(row=0, column=0, sticky="e")
+        ttk.Label(version_frame, textvariable=self.detail_created_at).grid(
+            row=0, column=1, sticky="w"
+        )
+
+        ttk.Label(version_frame, text="Mise à jour:").grid(row=1, column=0, sticky="e")
+        ttk.Label(version_frame, textvariable=self.detail_updated_at).grid(
+            row=1, column=1, sticky="w"
+        )
+
+        ttk.Label(version_frame, text="Changelog (1/ligne):").grid(
+            row=2, column=0, sticky="ne"
+        )
+        self.text_changelog = tk.Text(version_frame, height=6, wrap="word")
+        self.text_changelog.grid(row=2, column=1, sticky="we", padx=4, pady=2)
+
+        version_frame.grid_columnconfigure(1, weight=1)
+
         tests_frame = ttk.Frame(detail_notebook, padding=6)
         detail_notebook.add(tests_frame, text="Tests")
 
@@ -582,6 +606,8 @@ class KanbanIdeasApp(tk.Tk):
         self.detail_final_wording.set(idea.best_of.final_wording)
         self.detail_version.set(max(1, int(idea.version or 1)))
         self.detail_variant_of.set(idea.variant_of)
+        self.detail_created_at.set(idea.created_at or "—")
+        self.detail_updated_at.set(idea.updated_at or "—")
         self.transcript_text.delete("1.0", tk.END)
         self.transcript_text.insert("1.0", read_text(idea.transcript_path()))
         self.analysis_text.delete("1.0", tk.END)
@@ -599,6 +625,7 @@ class KanbanIdeasApp(tk.Tk):
             self.text_example_dialogues, "\n".join(idea.best_of.example_dialogues)
         )
         self._set_text_widget(self.text_files_evidence, "\n".join(idea.files.evidence))
+        self._set_text_widget(self.text_changelog, "\n".join(idea.changelog))
 
         self._populate_tests_tab(idea)
         self._update_summary_panel(idea)
@@ -637,6 +664,7 @@ class KanbanIdeasApp(tk.Tk):
             self.text_example_dialogues, limit=MAX_EXAMPLE_DIALOGUES
         )
         idea.files.evidence = self._text_to_list(self.text_files_evidence)
+        idea.changelog = self._text_to_list(self.text_changelog)
 
         idea.version = max(1, int(self.detail_version.get() or 1))
         idea.variant_of = self.detail_variant_of.get().strip()
