@@ -413,7 +413,7 @@ class Idea:
             "test_runs": [run.to_dict() for run in self.test_runs],
             "tests_total": self.tests_total,
             "tests_by_context": self.tests_by_context,
-            "signals_summary": self.signals_summary,
+            "signals": self.signals,
             "effectiveness_score": self.effectiveness_score,
             "decision": self.decision,
             "rationale": self.rationale,
@@ -487,7 +487,7 @@ class Idea:
         return max(0, min(100, int(round(raw_score))))
 
     @property
-    def signals_summary(self) -> Dict[str, float]:
+    def signals(self) -> Dict[str, float]:
         if not self.test_runs:
             return {
                 "smile": 0,
@@ -511,6 +511,12 @@ class Idea:
             "fluidite_avg": float(round(fluidite_avg, 2)),
             "awkward_avg": float(round(awkward_avg, 2)),
         }
+
+    @property
+    def signals_summary(self) -> Dict[str, float]:
+        """Backward compatible alias for :pyattr:`signals`."""
+
+        return self.signals
 
     def iter_test_runs(self) -> Iterable[TestRun]:
         """Yield each stored test run."""
