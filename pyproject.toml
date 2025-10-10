@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lesson-scribe"
+version = "0.1.0"
+description = "Journal de leçons avec gestion audio et transcription."
+readme = "README.md"
+authors = [{ name = "Kevin", email = "kevin@example.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    "python-dotenv>=1.0",
+    "numpy>=1.23",
+    "sounddevice>=0.4",
+]
+
+[project.optional-dependencies]
+dev = ["invoke>=2.2"]
+
+[project.scripts]
+lesson-scribe = "lesson_scribe:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
