@@ -29,6 +29,7 @@ class KanbanIdeasApp(tk.Tk):
         self.search_var = tk.StringVar()
         self.columns: Dict[str, tk.Listbox] = {}
         self.listbox_to_status: Dict[tk.Listbox, str] = {}
+        self.listbox_items: Dict[tk.Listbox, List[str]] = {}
 
         self.ideas: List[Idea] = []
         self.selected_idea: Optional[Idea] = None
@@ -176,9 +177,11 @@ class KanbanIdeasApp(tk.Tk):
 
         for status, listbox in self.columns.items():
             listbox.delete(0, tk.END)
+            self.listbox_items[listbox] = []
             for idea in filtered:
                 if idea.status == status:
                     listbox.insert(tk.END, idea.title)
+                    self.listbox_items[listbox].append(idea.id)
 
     def _filter_ideas(self, ideas: Iterable[Idea]) -> List[Idea]:
         query = self.search_var.get().strip().lower()
@@ -211,9 +214,13 @@ class KanbanIdeasApp(tk.Tk):
         if not selection:
             return
         index = selection[0]
-        title = widget.get(index)
+        idea_ids = self.listbox_items.get(widget)
+        if not idea_ids or index >= len(idea_ids):
+            return
+
+        target_id = idea_ids[index]
         for idea in self.ideas:
-            if idea.title == title and idea.status == self.listbox_to_status.get(widget):
+            if idea.id == target_id:
                 self._open_idea(idea)
                 break
 
