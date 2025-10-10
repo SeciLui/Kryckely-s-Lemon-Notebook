@@ -12,7 +12,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from . import config
-from .models import Idea
+from .models import Idea, IdeaContext
 from .services import transcribe_audio
 from .storage import load_all_ideas, read_text, write_text
 
@@ -38,6 +38,26 @@ class KanbanIdeasApp(tk.Tk):
         self.detail_status = tk.StringVar(value=config.STATUSES[0])
         self.detail_category = tk.StringVar()
         self.detail_tags = tk.StringVar()
+        self.detail_one_liner = tk.StringVar()
+        self.detail_purpose = tk.StringVar()
+        self.detail_audience = tk.StringVar()
+        self.detail_success = tk.StringVar()
+        self.detail_next_test_context = tk.StringVar()
+        self.detail_priority = tk.StringVar(value="low")
+        self.detail_decision = tk.StringVar(value="Keep")
+        self.detail_final_wording = tk.StringVar()
+        self.detail_version = tk.IntVar(value=1)
+        self.detail_variant_of = tk.StringVar()
+
+        self.text_risks: tk.Text | None = None
+        self.text_contexts: tk.Text | None = None
+        self.text_test_instructions: tk.Text | None = None
+        self.text_rationale: tk.Text | None = None
+        self.text_next_actions: tk.Text | None = None
+        self.text_delivery_tips: tk.Text | None = None
+        self.text_do_use_when: tk.Text | None = None
+        self.text_avoid_when: tk.Text | None = None
+        self.text_example_dialogues: tk.Text | None = None
         self.summary_tests_total = tk.StringVar(value="0 test")
         self.summary_tests_contexts = tk.StringVar(value="")
         self.summary_effectiveness = tk.StringVar(value="0")
@@ -132,6 +152,16 @@ class KanbanIdeasApp(tk.Tk):
             row=3, column=1, sticky="we", padx=4
         )
 
+        ttk.Label(form, text="Version:").grid(row=4, column=0, sticky="e")
+        tk.Spinbox(form, from_=1, to=999, textvariable=self.detail_version, width=6).grid(
+            row=4, column=1, sticky="w", padx=4
+        )
+
+        ttk.Label(form, text="Variante de:").grid(row=5, column=0, sticky="e")
+        ttk.Entry(form, textvariable=self.detail_variant_of, width=40).grid(
+            row=5, column=1, sticky="we", padx=4
+        )
+
         form.grid_columnconfigure(1, weight=1)
 
         buttons = ttk.Frame(right)
@@ -149,6 +179,133 @@ class KanbanIdeasApp(tk.Tk):
         ttk.Button(buttons, text="💡 Sauver analyse", command=self._save_analysis).pack(
             side=tk.LEFT
         )
+
+        detail_notebook = ttk.Notebook(right)
+        detail_notebook.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
+
+        fiche_frame = ttk.Frame(detail_notebook, padding=6)
+        detail_notebook.add(fiche_frame, text="Fiche")
+
+        ttk.Label(fiche_frame, text="One-liner:").grid(row=0, column=0, sticky="e")
+        ttk.Entry(fiche_frame, textvariable=self.detail_one_liner).grid(
+            row=0, column=1, sticky="we", padx=4, pady=2
+        )
+
+        ttk.Label(fiche_frame, text="Intention / purpose:").grid(
+            row=1, column=0, sticky="e"
+        )
+        ttk.Entry(fiche_frame, textvariable=self.detail_purpose).grid(
+            row=1, column=1, sticky="we", padx=4, pady=2
+        )
+
+        ttk.Label(fiche_frame, text="Audience hint:").grid(row=2, column=0, sticky="e")
+        ttk.Entry(fiche_frame, textvariable=self.detail_audience).grid(
+            row=2, column=1, sticky="we", padx=4, pady=2
+        )
+
+        ttk.Label(fiche_frame, text="Critère succès:").grid(row=3, column=0, sticky="e")
+        ttk.Entry(fiche_frame, textvariable=self.detail_success).grid(
+            row=3, column=1, sticky="we", padx=4, pady=2
+        )
+
+        ttk.Label(fiche_frame, text="Risques (1/ligne):").grid(
+            row=4, column=0, sticky="ne"
+        )
+        self.text_risks = tk.Text(fiche_frame, height=4, wrap="word")
+        self.text_risks.grid(row=4, column=1, sticky="we", padx=4, pady=2)
+
+        ttk.Label(fiche_frame, text="Contexts (label | canal | contraintes):").grid(
+            row=5, column=0, sticky="ne"
+        )
+        self.text_contexts = tk.Text(fiche_frame, height=5, wrap="word")
+        self.text_contexts.grid(row=5, column=1, sticky="we", padx=4, pady=2)
+
+        fiche_frame.grid_columnconfigure(1, weight=1)
+
+        plan_frame = ttk.Frame(detail_notebook, padding=6)
+        detail_notebook.add(plan_frame, text="Plan de test")
+
+        ttk.Label(plan_frame, text="Instructions de test:").grid(
+            row=0, column=0, sticky="ne"
+        )
+        self.text_test_instructions = tk.Text(plan_frame, height=6, wrap="word")
+        self.text_test_instructions.grid(row=0, column=1, sticky="we", padx=4, pady=2)
+
+        ttk.Label(plan_frame, text="Prochain contexte:").grid(
+            row=1, column=0, sticky="e"
+        )
+        ttk.Entry(plan_frame, textvariable=self.detail_next_test_context).grid(
+            row=1, column=1, sticky="we", padx=4, pady=2
+        )
+
+        ttk.Label(plan_frame, text="Priorité:").grid(row=2, column=0, sticky="e")
+        ttk.Combobox(
+            plan_frame,
+            values=["low", "med", "high"],
+            textvariable=self.detail_priority,
+            state="readonly",
+        ).grid(row=2, column=1, sticky="w", padx=4, pady=2)
+
+        plan_frame.grid_columnconfigure(1, weight=1)
+
+        synthese_frame = ttk.Frame(detail_notebook, padding=6)
+        detail_notebook.add(synthese_frame, text="Synthèse")
+
+        ttk.Label(synthese_frame, text="Décision:").grid(row=0, column=0, sticky="e")
+        ttk.Combobox(
+            synthese_frame,
+            values=["Keep", "Tweak", "Kill"],
+            textvariable=self.detail_decision,
+            state="readonly",
+        ).grid(row=0, column=1, sticky="w", padx=4, pady=2)
+
+        ttk.Label(synthese_frame, text="Rationale:").grid(row=1, column=0, sticky="ne")
+        self.text_rationale = tk.Text(synthese_frame, height=4, wrap="word")
+        self.text_rationale.grid(row=1, column=1, sticky="we", padx=4, pady=2)
+
+        ttk.Label(synthese_frame, text="Next actions (1/ligne):").grid(
+            row=2, column=0, sticky="ne"
+        )
+        self.text_next_actions = tk.Text(synthese_frame, height=4, wrap="word")
+        self.text_next_actions.grid(row=2, column=1, sticky="we", padx=4, pady=2)
+
+        synthese_frame.grid_columnconfigure(1, weight=1)
+
+        best_frame = ttk.Frame(detail_notebook, padding=6)
+        detail_notebook.add(best_frame, text="Best-of")
+
+        ttk.Label(best_frame, text="Formulation finale:").grid(
+            row=0, column=0, sticky="e"
+        )
+        ttk.Entry(best_frame, textvariable=self.detail_final_wording).grid(
+            row=0, column=1, sticky="we", padx=4, pady=2
+        )
+
+        ttk.Label(best_frame, text="Delivery tips (1/ligne):").grid(
+            row=1, column=0, sticky="ne"
+        )
+        self.text_delivery_tips = tk.Text(best_frame, height=4, wrap="word")
+        self.text_delivery_tips.grid(row=1, column=1, sticky="we", padx=4, pady=2)
+
+        ttk.Label(best_frame, text="À utiliser quand (1/ligne):").grid(
+            row=2, column=0, sticky="ne"
+        )
+        self.text_do_use_when = tk.Text(best_frame, height=4, wrap="word")
+        self.text_do_use_when.grid(row=2, column=1, sticky="we", padx=4, pady=2)
+
+        ttk.Label(best_frame, text="À éviter quand (1/ligne):").grid(
+            row=3, column=0, sticky="ne"
+        )
+        self.text_avoid_when = tk.Text(best_frame, height=4, wrap="word")
+        self.text_avoid_when.grid(row=3, column=1, sticky="we", padx=4, pady=2)
+
+        ttk.Label(best_frame, text="Dialogues exemple:").grid(
+            row=4, column=0, sticky="ne"
+        )
+        self.text_example_dialogues = tk.Text(best_frame, height=5, wrap="word")
+        self.text_example_dialogues.grid(row=4, column=1, sticky="we", padx=4, pady=2)
+
+        best_frame.grid_columnconfigure(1, weight=1)
 
         preview = ttk.Notebook(right)
         preview.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
@@ -272,10 +429,32 @@ class KanbanIdeasApp(tk.Tk):
         self.detail_status.set(idea.status)
         self.detail_category.set(idea.category)
         self.detail_tags.set(", ".join(idea.tags))
+        self.detail_one_liner.set(idea.one_liner)
+        self.detail_purpose.set(idea.purpose)
+        self.detail_audience.set(idea.audience_hint)
+        self.detail_success.set(idea.success_criteria)
+        self.detail_next_test_context.set(idea.next_test_context)
+        self.detail_priority.set(idea.priority or "low")
+        self.detail_decision.set(idea.decision or "Keep")
+        self.detail_final_wording.set(idea.best_of.final_wording)
+        self.detail_version.set(max(1, int(idea.version or 1)))
+        self.detail_variant_of.set(idea.variant_of)
         self.transcript_text.delete("1.0", tk.END)
         self.transcript_text.insert("1.0", read_text(idea.transcript_path()))
         self.analysis_text.delete("1.0", tk.END)
         self.analysis_text.insert("1.0", read_text(idea.analysis_path()))
+
+        self._set_text_widget(self.text_risks, "\n".join(idea.risks))
+        self._set_text_widget(self.text_contexts, self._contexts_to_text(idea.contexts))
+        self._set_text_widget(self.text_test_instructions, idea.test_instructions)
+        self._set_text_widget(self.text_rationale, idea.rationale)
+        self._set_text_widget(self.text_next_actions, "\n".join(idea.next_actions))
+        self._set_text_widget(self.text_delivery_tips, "\n".join(idea.best_of.delivery_tips))
+        self._set_text_widget(self.text_do_use_when, "\n".join(idea.best_of.do_use_when))
+        self._set_text_widget(self.text_avoid_when, "\n".join(idea.best_of.avoid_when))
+        self._set_text_widget(
+            self.text_example_dialogues, "\n".join(idea.best_of.example_dialogues)
+        )
 
         self._update_summary_panel(idea)
 
@@ -293,6 +472,26 @@ class KanbanIdeasApp(tk.Tk):
         idea.category = self.detail_category.get().strip()
         tags = [tag.strip() for tag in self.detail_tags.get().split(",") if tag.strip()]
         idea.tags = tags
+        idea.one_liner = self.detail_one_liner.get().strip()
+        idea.purpose = self.detail_purpose.get().strip()
+        idea.audience_hint = self.detail_audience.get().strip()
+        idea.success_criteria = self.detail_success.get().strip()
+        idea.risks = self._text_to_list(self.text_risks)
+        idea.contexts = self._text_to_contexts(self.text_contexts)
+        idea.test_instructions = self._text_to_string(self.text_test_instructions)
+        idea.next_test_context = self.detail_next_test_context.get().strip()
+        idea.priority = self.detail_priority.get() or "low"
+        idea.decision = self.detail_decision.get() or "Keep"
+        idea.rationale = self._text_to_string(self.text_rationale)
+        idea.next_actions = self._text_to_list(self.text_next_actions)
+        idea.best_of.final_wording = self.detail_final_wording.get().strip()
+        idea.best_of.delivery_tips = self._text_to_list(self.text_delivery_tips)
+        idea.best_of.do_use_when = self._text_to_list(self.text_do_use_when)
+        idea.best_of.avoid_when = self._text_to_list(self.text_avoid_when)
+        idea.best_of.example_dialogues = self._text_to_list(self.text_example_dialogues)
+
+        idea.version = max(1, int(self.detail_version.get() or 1))
+        idea.variant_of = self.detail_variant_of.get().strip()
         idea.save()
         write_text(idea.transcript_path(), self.transcript_text.get("1.0", tk.END))
         write_text(idea.analysis_path(), self.analysis_text.get("1.0", tk.END))
@@ -449,3 +648,53 @@ class KanbanIdeasApp(tk.Tk):
         else:
             actions = "—"
         self.summary_next_actions.set(actions)
+
+    # ------------------------------------------------------------------
+    # TEXT UTILITIES
+    # ------------------------------------------------------------------
+    def _set_text_widget(self, widget: tk.Text | None, content: str) -> None:
+        if widget is None:
+            return
+        widget.delete("1.0", tk.END)
+        widget.insert("1.0", content.strip())
+
+    def _text_to_list(self, widget: tk.Text | None) -> List[str]:
+        if widget is None:
+            return []
+        raw = widget.get("1.0", tk.END)
+        return [line.strip() for line in raw.splitlines() if line.strip()]
+
+    def _text_to_string(self, widget: tk.Text | None) -> str:
+        if widget is None:
+            return ""
+        return widget.get("1.0", tk.END).strip()
+
+    def _contexts_to_text(self, contexts: Iterable[IdeaContext]) -> str:
+        lines: List[str] = []
+        for context in contexts:
+            parts = [context.label.strip(), context.channel.strip(), context.constraints.strip()]
+            while parts and not parts[-1]:
+                parts.pop()
+            lines.append(" | ".join(parts))
+        return "\n".join(lines)
+
+    def _text_to_contexts(self, widget: tk.Text | None) -> List[IdeaContext]:
+        contexts: List[IdeaContext] = []
+        if widget is None:
+            return contexts
+        raw = widget.get("1.0", tk.END)
+        for line in raw.splitlines():
+            if not line.strip():
+                continue
+            parts = [part.strip() for part in line.split("|")]
+            label = parts[0] if parts else ""
+            channel = parts[1] if len(parts) > 1 else "IRL"
+            constraints = parts[2] if len(parts) > 2 else ""
+            contexts.append(
+                IdeaContext(
+                    label=label,
+                    channel=channel or "IRL",
+                    constraints=constraints,
+                )
+            )
+        return contexts
