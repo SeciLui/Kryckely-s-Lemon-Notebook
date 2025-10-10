@@ -678,6 +678,8 @@ class Idea:
                 [
                     ("final_wording", bool(self.best_of.final_wording)),
                     ("delivery_tips", bool(self.best_of.delivery_tips)),
+                    ("do_use_when", bool(self.best_of.do_use_when)),
+                    ("avoid_when", bool(self.best_of.avoid_when)),
                     (
                         "example_dialogues",
                         bool(self.best_of.example_dialogues),
