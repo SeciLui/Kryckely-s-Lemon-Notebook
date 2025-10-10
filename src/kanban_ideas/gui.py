@@ -15,6 +15,10 @@ from tkinter import filedialog, messagebox, ttk
 from . import config
 from .models import (
     IDEA_DECISIONS,
+    MAX_CONTEXTS,
+    MAX_EXAMPLE_DIALOGUES,
+    MAX_NEXT_ACTIONS,
+    MAX_TAGS,
     PRIORITIES,
     TEST_RUN_DECISIONS,
     TEST_RUN_MODES,
@@ -612,7 +616,7 @@ class KanbanIdeasApp(tk.Tk):
         idea.status = self.detail_status.get()
         idea.category = self.detail_category.get().strip()
         tags = [tag.strip() for tag in self.detail_tags.get().split(",") if tag.strip()]
-        idea.tags = tags
+        idea.tags = tags[:MAX_TAGS]
         idea.one_liner = self.detail_one_liner.get().strip()
         idea.purpose = self.detail_purpose.get().strip()
         idea.audience_hint = self.detail_audience.get().strip()
@@ -624,12 +628,14 @@ class KanbanIdeasApp(tk.Tk):
         idea.priority = self.detail_priority.get() or "low"
         idea.decision = self.detail_decision.get() or "Keep"
         idea.rationale = self._text_to_string(self.text_rationale)
-        idea.next_actions = self._text_to_list(self.text_next_actions)
+        idea.next_actions = self._text_to_list(self.text_next_actions, limit=MAX_NEXT_ACTIONS)
         idea.best_of.final_wording = self.detail_final_wording.get().strip()
         idea.best_of.delivery_tips = self._text_to_list(self.text_delivery_tips)
         idea.best_of.do_use_when = self._text_to_list(self.text_do_use_when)
         idea.best_of.avoid_when = self._text_to_list(self.text_avoid_when)
-        idea.best_of.example_dialogues = self._text_to_list(self.text_example_dialogues)
+        idea.best_of.example_dialogues = self._text_to_list(
+            self.text_example_dialogues, limit=MAX_EXAMPLE_DIALOGUES
+        )
         idea.files.evidence = self._text_to_list(self.text_files_evidence)
 
         idea.version = max(1, int(self.detail_version.get() or 1))
@@ -1052,11 +1058,19 @@ class KanbanIdeasApp(tk.Tk):
         widget.insert("1.0", content.strip())
         widget.configure(state="disabled")
 
-    def _text_to_list(self, widget: tk.Text | None) -> List[str]:
+    def _text_to_list(self, widget: tk.Text | None, *, limit: int | None = None) -> List[str]:
         if widget is None:
             return []
         raw = widget.get("1.0", tk.END)
-        return [line.strip() for line in raw.splitlines() if line.strip()]
+        items: List[str] = []
+        for line in raw.splitlines():
+            text = line.strip()
+            if not text:
+                continue
+            items.append(text)
+            if limit is not None and len(items) >= limit:
+                break
+        return items
 
     def _text_to_string(self, widget: tk.Text | None) -> str:
         if widget is None:
@@ -1091,4 +1105,6 @@ class KanbanIdeasApp(tk.Tk):
                     constraints=constraints,
                 )
             )
+            if len(contexts) >= MAX_CONTEXTS:
+                break
         return contexts
