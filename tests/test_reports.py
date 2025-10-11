@@ -1,4 +1,5 @@
 import io
+import json
 import sys
 import tempfile
 import unittest
@@ -19,7 +20,7 @@ from kanban_ideas.models import (
     TestRun,
     TestSignals,
 )
-from kanban_ideas.reports import build_spec_summary
+from kanban_ideas.reports import build_spec_summary, build_spec_summary_payload
 
 
 class SpecReportTest(unittest.TestCase):
@@ -120,6 +121,19 @@ class SpecReportTest(unittest.TestCase):
         self.assertIn("Identité & statut", summary)
         self.assertIn("Aucun test enregistré", summary)
 
+    def test_build_spec_summary_payload_returns_machine_readable_data(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "idea"
+            idea = self._complete_idea(folder)
+            payload = build_spec_summary_payload([idea])
+
+        self.assertEqual(len(payload), 1)
+        entry = payload[0]
+        self.assertTrue(entry["is_complete"])
+        self.assertEqual(entry["tests_total"], 2)
+        self.assertEqual(entry["signals"]["laugh"], 1)
+        self.assertEqual(entry["missing_sections"], {})
+
     def test_main_spec_report_prints_to_stdout(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp) / "idea"
@@ -135,6 +149,31 @@ class SpecReportTest(unittest.TestCase):
                 sys.stdout = saved_stdout
 
         self.assertIn("Compliment utile – bibliothèque", output)
+
+    def test_main_spec_report_json_prints_structured_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "idea"
+            idea = self._complete_idea(folder)
+            idea.save()
+
+            saved_stdout = sys.stdout
+            try:
+                sys.stdout = io.StringIO()
+                main([
+                    "--spec-report",
+                    "--spec-report-format",
+                    "json",
+                    "--ideas-dir",
+                    tmp,
+                ])
+                output = sys.stdout.getvalue()
+            finally:
+                sys.stdout = saved_stdout
+
+        data = json.loads(output)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["id"], idea.id)
+        self.assertTrue(data[0]["is_complete"])
 
 
 if __name__ == "__main__":
