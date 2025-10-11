@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 from typing import Sequence
 
 from . import config
-from .reports import build_spec_summary
+from .reports import build_spec_summary, build_spec_summary_payload
 from .storage import load_all_ideas
 
 
@@ -21,6 +22,12 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="affiche un résumé de conformité au cahier des charges puis quitte",
     )
     parser.add_argument(
+        "--spec-report-format",
+        choices=["text", "json"],
+        default="text",
+        help="format de sortie du rapport de conformité (défaut: text)",
+    )
+    parser.add_argument(
         "--ideas-dir",
         type=Path,
         default=config.IDEAS_ROOT,
@@ -30,7 +37,11 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     if args.spec_report:
         ideas = load_all_ideas(args.ideas_dir)
-        print(build_spec_summary(ideas))
+        if args.spec_report_format == "json":
+            payload = build_spec_summary_payload(ideas)
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            print(build_spec_summary(ideas))
         return
 
     from .gui import KanbanIdeasApp  # Imported lazily to avoid Tk on report runs.
