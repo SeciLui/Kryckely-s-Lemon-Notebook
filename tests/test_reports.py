@@ -90,7 +90,7 @@ class SpecReportTest(unittest.TestCase):
             ),
             files=IdeaFiles(audio=[], evidence=["captures/screen1.png"]),
             version=2,
-            variant_of="",
+            variant_of="2025-02-10_080000_esquisse",
             changelog=["Création de l'idée.", "Mise à jour."],
             folder=folder,
         )
@@ -133,6 +133,9 @@ class SpecReportTest(unittest.TestCase):
         self.assertEqual(entry["tests_total"], 2)
         self.assertEqual(entry["signals"]["laugh"], 1)
         self.assertEqual(entry["missing_sections"], {})
+        self.assertEqual(entry["version"], 2)
+        self.assertEqual(entry["variant_of"], "2025-02-10_080000_esquisse")
+        self.assertEqual(entry["changelog"], ["Création de l'idée.", "Mise à jour."])
 
     def test_main_spec_report_prints_to_stdout(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
