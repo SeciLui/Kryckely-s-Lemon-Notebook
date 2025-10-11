@@ -14,6 +14,7 @@ from kanban_ideas.models import (
     Idea,
     IdeaBestOf,
     IdeaContext,
+    IdeaFiles,
     TestRun,
     TestSignals,
 )
@@ -84,6 +85,7 @@ class IdeaModelSpecTest(unittest.TestCase):
                     "Toi: Sérieux, j'ai envie d'y emprunter un chapitre.",
                 ],
             ),
+            files=IdeaFiles(evidence=["captures/screen1.png"]),
             folder=folder,
         )
         return idea
@@ -204,6 +206,7 @@ class IdeaModelSpecTest(unittest.TestCase):
             self.assertIn("purpose", report["intention"].missing_fields)
             self.assertIn("Au moins un contexte", report["contexts"].missing_fields)
             self.assertIn("test_instructions", report["plan"].missing_fields)
+            self.assertIn("audio ou preuves", report["attachments"].missing_fields)
             self.assertIn("Aucun test enregistré", report["tests"].missing_fields)
             self.assertIn("rationale", report["synthesis"].missing_fields)
 

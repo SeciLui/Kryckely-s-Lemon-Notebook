@@ -644,6 +644,16 @@ class Idea:
             ],
         )
 
+        report["attachments"] = section(
+            "Liens & pièces jointes",
+            [
+                (
+                    "audio ou preuves",
+                    bool(self.files.audio) or bool(self.files.evidence),
+                ),
+            ],
+        )
+
         tests_missing: List[str] = []
         if not self.test_runs:
             tests_missing.append("Aucun test enregistré")
