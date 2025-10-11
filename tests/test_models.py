@@ -139,6 +139,29 @@ class IdeaModelSpecTest(unittest.TestCase):
         self.assertEqual(signals.fluidite, 5)
         self.assertEqual(signals.awkward, 5)
 
+    def test_signals_from_dict_handles_messy_payloads(self) -> None:
+        payload = {
+            "smile": " 1 ",
+            "laugh": "",
+            "relance": "not a number",
+            "fluidite": None,
+            "awkward": "4",
+        }
+
+        signals = TestSignals.from_dict(payload)
+
+        self.assertEqual(signals.smile, 1)
+        self.assertEqual(signals.laugh, 0)
+        self.assertEqual(signals.relance, 0)
+        self.assertEqual(signals.fluidite, 0)
+        self.assertEqual(signals.awkward, 4)
+
+        list_payload = [("smile", "2"), ("awkward", 10)]
+        signals_from_iterable = TestSignals.from_dict(list_payload)
+
+        self.assertEqual(signals_from_iterable.smile, 1)
+        self.assertEqual(signals_from_iterable.awkward, 5)
+
     def test_context_list_is_limited_to_spec(self) -> None:
         contexts = [IdeaContext(label=f"ctx {idx}") for idx in range(MAX_CONTEXTS + 2)]
         with tempfile.TemporaryDirectory() as tmp:
