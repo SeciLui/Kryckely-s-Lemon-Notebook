@@ -153,6 +153,11 @@ class IdeaModelSpecTest(unittest.TestCase):
 
             self.assertEqual(len(idea.contexts), MAX_CONTEXTS)
 
+    def test_context_channel_defaults_to_allowed_values(self) -> None:
+        context = IdeaContext(label="Impro", channel="Zoom", constraints="rapide")
+
+        self.assertEqual(context.channel, "IRL")
+
     def test_best_of_limits_example_dialogues(self) -> None:
         best_of = IdeaBestOf(
             example_dialogues=["A", "B", "C"],
