@@ -166,13 +166,25 @@ class TestSignals:
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any] | None) -> "TestSignals":
-        payload = payload or {}
+        if payload is None:
+            payload_dict: Dict[str, Any] = {}
+        elif isinstance(payload, dict):
+            payload_dict = payload
+        else:
+            try:
+                payload_dict = dict(payload)
+            except Exception:  # pragma: no cover - defensive fallback
+                payload_dict = {}
+
+        def coerce(key: str, maximum: int) -> int:
+            return _clamp_int(payload_dict.get(key, 0), 0, maximum, default=0)
+
         return cls(
-            smile=int(payload.get("smile", 0)),
-            laugh=int(payload.get("laugh", 0)),
-            relance=int(payload.get("relance", 0)),
-            fluidite=int(payload.get("fluidite", 0)),
-            awkward=int(payload.get("awkward", 0)),
+            smile=coerce("smile", 1),
+            laugh=coerce("laugh", 1),
+            relance=coerce("relance", 1),
+            fluidite=coerce("fluidite", 5),
+            awkward=coerce("awkward", 5),
         )
 
     def to_dict(self) -> Dict[str, int]:
