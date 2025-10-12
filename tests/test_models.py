@@ -86,6 +86,9 @@ class IdeaModelSpecTest(unittest.TestCase):
                 ],
             ),
             files=IdeaFiles(evidence=["captures/screen1.png"]),
+            version=3,
+            variant_of="2025-02-20_101010_proto",
+            changelog=["Création de l'idée.", "Ajout d'une variante"],
             folder=folder,
         )
         return idea
@@ -132,6 +135,11 @@ class IdeaModelSpecTest(unittest.TestCase):
             self.assertEqual(payload["signals"]["laugh"], 1)
             self.assertEqual(payload["files"]["audio"], [])
             self.assertIn("delivery_tips", payload["best_of"])
+            self.assertEqual(payload["version"], 3)
+            self.assertEqual(payload["variant_of"], "2025-02-20_101010_proto")
+            self.assertEqual(
+                payload["changelog"], ["Création de l'idée.", "Ajout d'une variante"]
+            )
 
     def test_signal_values_are_clamped(self) -> None:
         signals = TestSignals(smile=5, laugh=-1, relance=2, fluidite=10, awkward="7")
