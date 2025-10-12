@@ -644,12 +644,16 @@ class Idea:
             ],
         )
 
+        has_audio = bool(self.files.audio)
+        has_evidence = bool(self.files.evidence) or any(
+            bool(run.evidence) for run in self.test_runs
+        )
         report["attachments"] = section(
             "Liens & pièces jointes",
             [
                 (
                     "audio ou preuves",
-                    bool(self.files.audio) or bool(self.files.evidence),
+                    has_audio or has_evidence,
                 ),
             ],
         )

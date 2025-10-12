@@ -235,6 +235,33 @@ class IdeaModelSpecTest(unittest.TestCase):
 
             self.assertIn("contexte #1: constraints", report["contexts"].missing_fields)
 
+    def test_spec_report_accepts_run_level_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run = TestRun(
+                date="2025-03-02T19:05:00",
+                mode="live (IRL)",
+                context_ref="date tranquille",
+                partner_profile="Amie lectrice",
+                version_used="A",
+                outcome_score=4,
+                evidence=["captures/screen1.png"],
+            )
+            idea = Idea(
+                id="with-run-evidence",
+                title="Idée",
+                created_at="2025-01-01T00:00:00",
+                updated_at="2025-01-01T00:00:00",
+                test_runs=[run],
+                folder=Path(tmp),
+            )
+
+            report = idea.spec_report()
+
+            self.assertNotIn(
+                "audio ou preuves",
+                report["attachments"].missing_fields,
+            )
+
     def test_best_of_section_requires_all_fields(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             idea = Idea(
