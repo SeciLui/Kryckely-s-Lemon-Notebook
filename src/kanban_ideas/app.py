@@ -8,7 +8,11 @@ from pathlib import Path
 from typing import Sequence
 
 from . import config
-from .reports import build_spec_summary, build_spec_summary_payload
+from .reports import (
+    build_spec_statistics,
+    build_spec_summary,
+    build_spec_summary_payload,
+)
 from .storage import load_all_ideas
 
 
@@ -23,9 +27,12 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     parser.add_argument(
         "--spec-report-format",
-        choices=["text", "json"],
+        choices=["text", "json", "stats"],
         default="text",
-        help="format de sortie du rapport de conformité (défaut: text)",
+        help=(
+            "format de sortie du rapport de conformité (défaut: text). "
+            "Utiliser 'stats' pour obtenir un tableau de bord agrégé."
+        ),
     )
     parser.add_argument(
         "--ideas-dir",
@@ -40,6 +47,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         if args.spec_report_format == "json":
             payload = build_spec_summary_payload(ideas)
             print(json.dumps(payload, ensure_ascii=False, indent=2))
+        elif args.spec_report_format == "stats":
+            stats = build_spec_statistics(ideas)
+            print(json.dumps(stats, ensure_ascii=False, indent=2))
         else:
             print(build_spec_summary(ideas))
         return

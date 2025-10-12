@@ -74,7 +74,8 @@ invoke install   # Crée l’environnement virtuel local et installe le projet
 invoke run       # Lance l’application (équivalent à `python -m kanban_ideas`)
 invoke lint      # Exécute Ruff si l’outil est disponible dans la venv
 kanban-ideas --spec-report  # Affiche la complétude des fiches idées selon le cahier des charges
-kanban-ideas --spec-report --spec-report-format json  # Version JSON pour automatiser le suivi
+kanban-ideas --spec-report --spec-report-format json   # Version JSON pour automatiser le suivi
+kanban-ideas --spec-report --spec-report-format stats  # Tableau de bord agrégé (JSON)
 ```
 
 ## Fonctionnalités principales

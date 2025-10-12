@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Dict, Iterable, List
 
 from .models import Idea, SpecSectionReport
@@ -95,3 +96,52 @@ def build_spec_summary_payload(ideas: Iterable[Idea]) -> List[Dict[str, object]]
         )
 
     return payload
+
+
+def build_spec_statistics(ideas: Iterable[Idea]) -> Dict[str, object]:
+    """Return aggregate metrics describing spec completion.
+
+    The resulting dictionary can be used to monitor overall progress toward a
+    fully spec-compliant workspace. It contains counts of complete vs.
+    incomplete fiches, testing volume and the distribution of contexts and
+    statuses. The averages ignore ideas without recorded tests so newly created
+    fiches do not skew the learning indicators.
+    """
+
+    idea_list: List[Idea] = list(ideas)
+    total = len(idea_list)
+    complete = sum(1 for idea in idea_list if idea.is_spec_complete())
+    incomplete = total - complete
+    tests_total = sum(idea.tests_total for idea in idea_list)
+    ideas_with_tests = sum(1 for idea in idea_list if idea.tests_total > 0)
+
+    # Aggregate counts per context and status for quick dashboards.
+    contexts_counter: Counter[str] = Counter()
+    for idea in idea_list:
+        contexts_counter.update(idea.tests_by_context)
+
+    statuses_counter: Counter[str] = Counter(idea.status for idea in idea_list)
+
+    effectiveness_scores = [
+        idea.effectiveness_score for idea in idea_list if idea.tests_total > 0
+    ]
+    avg_effectiveness = (
+        round(sum(effectiveness_scores) / len(effectiveness_scores), 2)
+        if effectiveness_scores
+        else 0.0
+    )
+
+    completion_rate = round((complete / total) * 100, 2) if total else 0.0
+
+    return {
+        "total_ideas": total,
+        "complete": complete,
+        "incomplete": incomplete,
+        "completion_rate": completion_rate,
+        "tests_total": tests_total,
+        "ideas_with_tests": ideas_with_tests,
+        "ideas_without_tests": total - ideas_with_tests,
+        "average_effectiveness": avg_effectiveness,
+        "tests_by_context": dict(sorted(contexts_counter.items())),
+        "statuses": dict(sorted(statuses_counter.items())),
+    }

@@ -20,7 +20,11 @@ from kanban_ideas.models import (
     TestRun,
     TestSignals,
 )
-from kanban_ideas.reports import build_spec_summary, build_spec_summary_payload
+from kanban_ideas.reports import (
+    build_spec_statistics,
+    build_spec_summary,
+    build_spec_summary_payload,
+)
 
 
 class SpecReportTest(unittest.TestCase):
@@ -137,6 +141,30 @@ class SpecReportTest(unittest.TestCase):
         self.assertEqual(entry["variant_of"], "2025-02-10_080000_esquisse")
         self.assertEqual(entry["changelog"], ["Création de l'idée.", "Mise à jour."])
 
+    def test_build_spec_statistics_returns_dashboard_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "idea"
+            idea_complete = self._complete_idea(folder)
+            idea_incomplete = Idea(
+                id="incomplete",
+                title="À préparer",
+                created_at="2025-01-01T00:00:00",
+                updated_at="2025-01-01T00:00:00",
+                status="Inbox",
+                folder=Path(tmp) / "incomplete",
+            )
+
+            stats = build_spec_statistics([idea_complete, idea_incomplete])
+
+        self.assertEqual(stats["total_ideas"], 2)
+        self.assertEqual(stats["complete"], 1)
+        self.assertEqual(stats["incomplete"], 1)
+        self.assertEqual(stats["tests_total"], 2)
+        self.assertEqual(stats["ideas_without_tests"], 1)
+        self.assertGreater(stats["average_effectiveness"], 0)
+        self.assertIn("Best-of", stats["statuses"])
+        self.assertIn("ami·e en café", stats["tests_by_context"])
+
     def test_main_spec_report_prints_to_stdout(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp) / "idea"
@@ -177,6 +205,30 @@ class SpecReportTest(unittest.TestCase):
         self.assertEqual(len(data), 1)
         self.assertEqual(data[0]["id"], idea.id)
         self.assertTrue(data[0]["is_complete"])
+
+    def test_main_spec_report_stats_prints_dashboard_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "idea"
+            idea = self._complete_idea(folder)
+            idea.save()
+
+            saved_stdout = sys.stdout
+            try:
+                sys.stdout = io.StringIO()
+                main([
+                    "--spec-report",
+                    "--spec-report-format",
+                    "stats",
+                    "--ideas-dir",
+                    tmp,
+                ])
+                output = sys.stdout.getvalue()
+            finally:
+                sys.stdout = saved_stdout
+
+        data = json.loads(output)
+        self.assertIn("total_ideas", data)
+        self.assertEqual(data["complete"], 1)
 
 
 if __name__ == "__main__":
