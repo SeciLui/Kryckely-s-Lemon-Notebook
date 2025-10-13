@@ -162,6 +162,10 @@ class SpecReportTest(unittest.TestCase):
         self.assertEqual(stats["tests_total"], 2)
         self.assertEqual(stats["ideas_without_tests"], 1)
         self.assertGreater(stats["average_effectiveness"], 0)
+        self.assertIn("signals_totals", stats)
+        self.assertEqual(stats["signals_totals"]["laugh"], 1)
+        self.assertAlmostEqual(stats["signals_totals"]["fluidite_avg"], 3.0)
+        self.assertAlmostEqual(stats["signals_totals"]["awkward_avg"], 2.0)
         self.assertIn("Best-of", stats["statuses"])
         self.assertIn("ami·e en café", stats["tests_by_context"])
 

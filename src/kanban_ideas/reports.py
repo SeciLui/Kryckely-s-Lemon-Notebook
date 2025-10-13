@@ -103,9 +103,10 @@ def build_spec_statistics(ideas: Iterable[Idea]) -> Dict[str, object]:
 
     The resulting dictionary can be used to monitor overall progress toward a
     fully spec-compliant workspace. It contains counts of complete vs.
-    incomplete fiches, testing volume and the distribution of contexts and
-    statuses. The averages ignore ideas without recorded tests so newly created
-    fiches do not skew the learning indicators.
+    incomplete fiches, testing volume, the distribution of contexts and
+    statuses, plus aggregate behavioural signals captured during the tests.
+    The averages ignore ideas without recorded tests so newly created fiches do
+    not skew the learning indicators.
     """
 
     idea_list: List[Idea] = list(ideas)
@@ -131,6 +132,27 @@ def build_spec_statistics(ideas: Iterable[Idea]) -> Dict[str, object]:
         else 0.0
     )
 
+    signals_totals: Counter[str] = Counter()
+    fluidite_total = 0
+    awkward_total = 0
+    runs_count = 0
+    for idea in idea_list:
+        for run in idea.test_runs:
+            signals_totals["smile"] += int(run.signals.smile)
+            signals_totals["laugh"] += int(run.signals.laugh)
+            signals_totals["relance"] += int(run.signals.relance)
+            fluidite_total += int(run.signals.fluidite)
+            awkward_total += int(run.signals.awkward)
+            runs_count += 1
+
+    signals_summary = {
+        "smile": int(signals_totals.get("smile", 0)),
+        "laugh": int(signals_totals.get("laugh", 0)),
+        "relance": int(signals_totals.get("relance", 0)),
+        "fluidite_avg": round(fluidite_total / runs_count, 2) if runs_count else 0.0,
+        "awkward_avg": round(awkward_total / runs_count, 2) if runs_count else 0.0,
+    }
+
     completion_rate = round((complete / total) * 100, 2) if total else 0.0
 
     return {
@@ -142,6 +164,7 @@ def build_spec_statistics(ideas: Iterable[Idea]) -> Dict[str, object]:
         "ideas_with_tests": ideas_with_tests,
         "ideas_without_tests": total - ideas_with_tests,
         "average_effectiveness": avg_effectiveness,
+        "signals_totals": signals_summary,
         "tests_by_context": dict(sorted(contexts_counter.items())),
         "statuses": dict(sorted(statuses_counter.items())),
     }
