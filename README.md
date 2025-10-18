@@ -73,12 +73,17 @@ Les tâches se trouvent dans `tasks.py` :
 invoke install   # Crée l’environnement virtuel local et installe le projet
 invoke run       # Lance l’application (équivalent à `python -m kanban_ideas`)
 invoke lint      # Exécute Ruff si l’outil est disponible dans la venv
+kanban-ideas --spec-report  # Affiche la complétude des fiches idées selon le cahier des charges
+kanban-ideas --spec-report --spec-report-format json   # Version JSON pour automatiser le suivi
+kanban-ideas --spec-report --spec-report-format stats  # Tableau de bord agrégé (JSON)
 ```
 
 ## Fonctionnalités principales
 
 * **Gestion Kanban** : glissez mentalement vos idées entre six statuts et modifiez
-  les métadonnées (catégorie, tags, etc.).
+  les métadonnées (catégorie, tags, etc.). Les champs multi-lignes respectent les
+  bornes du cahier des charges (≤3 contextes, ≤6 tags, 1–3 next actions, 1–2
+  dialogues d’exemple).
 * **Import audio** : ajoutez un ou plusieurs fichiers audio qui seront copiés dans
   le workspace de l’idée.
 * **Transcription** : déclenchez un outil externe (configuré dans `config.py`) pour
