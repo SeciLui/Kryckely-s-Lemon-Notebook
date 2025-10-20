@@ -682,14 +682,10 @@ class KanbanIdeasApp(tk.Tk):
         idea.version = max(1, int(self.detail_version.get() or 1))
         idea.variant_of = self.detail_variant_of.get().strip()
         analysis_content = self.analysis_text.get("1.0", tk.END)
-        warnings, _ = self._apply_analysis_json(idea, analysis_content)
         idea.save()
         write_text(idea.transcript_path(), self.transcript_text.get("1.0", tk.END))
         write_text(idea.analysis_path(), analysis_content)
-        status = "Sauvegardé ✅"
-        if warnings:
-            status += " · " + " | ".join(warnings)
-        self._set_status(status)
+        self._set_status("Sauvegardé ✅")
         self._load_data()
 
     def _move_to_status_dialog(self) -> None:
