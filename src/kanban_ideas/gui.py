@@ -27,7 +27,12 @@ from .models import (
     TestRun,
     TestSignals,
 )
-from .services import AudioRecordingError, record_audio_to_file, transcribe_audio
+from .services import (
+    AudioRecordingError,
+    build_analysis_prompt,
+    record_audio_to_file,
+    transcribe_audio,
+)
 from .storage import load_all_ideas, read_text, write_text
 
 
@@ -210,6 +215,9 @@ class KanbanIdeasApp(tk.Tk):
         )
         ttk.Button(buttons, text="💡 Sauver analyse", command=self._save_analysis).pack(
             side=tk.LEFT
+        )
+        ttk.Button(buttons, text="📋 Copier prompt", command=self._copy_analysis_prompt).pack(
+            side=tk.LEFT, padx=6
         )
 
         detail_notebook = ttk.Notebook(right)
@@ -1061,6 +1069,18 @@ class KanbanIdeasApp(tk.Tk):
         content = self.analysis_text.get("1.0", tk.END)
         write_text(idea.analysis_path(), content)
         self._set_status("Analyse sauvegardée ✅")
+
+    def _copy_analysis_prompt(self) -> None:
+        idea = self.selected_idea
+        if not idea:
+            self._set_status("Sélectionne une idée d’abord.")
+            self.bell()
+            return
+
+        prompt = build_analysis_prompt(idea)
+        self.clipboard_clear()
+        self.clipboard_append(prompt)
+        self._set_status("Prompt d’analyse copié ✅")
 
     # ------------------------------------------------------------------
     # BACKGROUND QUEUE
