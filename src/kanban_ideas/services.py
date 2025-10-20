@@ -4,10 +4,82 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import wave
 from pathlib import Path
 from typing import Iterable, Sequence, Tuple
 
 from . import config
+
+try:  # Optional dependency loaded lazily to provide nicer error messages
+    import sounddevice as sd  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover - handled at runtime
+    sd = None  # type: ignore[assignment]
+
+
+class AudioRecordingError(RuntimeError):
+    """Raised when an audio recording cannot be completed."""
+
+
+def record_audio_to_file(
+    destination: Path,
+    duration_seconds: float,
+    *,
+    sample_rate: int = 44_100,
+    channels: int = 1,
+) -> Path:
+    """Record audio from the default input and write a WAV file.
+
+    Parameters
+    ----------
+    destination:
+        Target file path where the recording should be written.
+    duration_seconds:
+        Maximum duration of the recording in seconds.
+    sample_rate:
+        Sampling rate used for the capture (defaults to 44.1 kHz).
+    channels:
+        Number of channels to record. ``1`` captures mono audio.
+
+    Returns
+    -------
+    pathlib.Path
+        The *destination* path once the file has been created.
+    """
+
+    if duration_seconds <= 0:
+        raise AudioRecordingError("La durée doit être positive.")
+
+    if sd is None:
+        raise AudioRecordingError(
+            "La bibliothèque sounddevice n'est pas installée."
+        )
+
+    frames = int(duration_seconds * sample_rate)
+
+    try:
+        recording = sd.rec(  # type: ignore[call-arg]
+            frames,
+            samplerate=sample_rate,
+            channels=channels,
+            dtype="int16",
+        )
+        sd.wait()  # type: ignore[call-arg]
+    except Exception as exc:  # pragma: no cover - interacts with hardware
+        raise AudioRecordingError(str(exc)) from exc
+
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(destination), "wb") as handle:
+            handle.setnchannels(channels)
+            handle.setsampwidth(2)  # 16-bit samples
+            handle.setframerate(sample_rate)
+            handle.writeframes(recording.tobytes())
+    except Exception as exc:  # pragma: no cover - filesystem errors
+        raise AudioRecordingError(
+            f"Impossible d'écrire le fichier audio: {exc}"
+        ) from exc
+
+    return destination
 
 
 def run_subprocess(command: Sequence[str]) -> Tuple[int, str, str]:

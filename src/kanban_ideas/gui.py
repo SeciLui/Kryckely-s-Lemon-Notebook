@@ -27,7 +27,7 @@ from .models import (
     TestRun,
     TestSignals,
 )
-from .services import transcribe_audio
+from .services import AudioRecordingError, record_audio_to_file, transcribe_audio
 from .storage import load_all_ideas, read_text, write_text
 
 
@@ -201,6 +201,9 @@ class KanbanIdeasApp(tk.Tk):
         ).pack(side=tk.LEFT, padx=6)
         ttk.Button(buttons, text="🎧 Ajouter audio…", command=self._add_audio).pack(
             side=tk.LEFT
+        )
+        ttk.Button(buttons, text="● Enregistrer", command=self._record_audio).pack(
+            side=tk.LEFT, padx=6
         )
         ttk.Button(buttons, text="📝 Transcrire", command=self._transcribe_audio).pack(
             side=tk.LEFT, padx=6
@@ -896,6 +899,135 @@ class KanbanIdeasApp(tk.Tk):
 
         idea.save()
         self._set_status(f"{imported} audio importé(s).")
+
+    def _record_audio(self) -> None:
+        if not self.selected_idea:
+            self._set_status("Sélectionne une idée d’abord.")
+            return
+
+        idea = self.selected_idea
+
+        dialog = tk.Toplevel(self)
+        dialog.title("Nouvel enregistrement audio")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+
+        container = ttk.Frame(dialog, padding=10)
+        container.grid(row=0, column=0)
+
+        ttk.Label(container, text="Durée max (secondes):").grid(
+            row=0, column=0, sticky="e", pady=(0, 6)
+        )
+        duration_var = tk.StringVar(value="60")
+        ttk.Entry(container, textvariable=duration_var, width=12).grid(
+            row=0, column=1, sticky="w", padx=(6, 0), pady=(0, 6)
+        )
+
+        default_name = f"enregistrement-{dt.datetime.now():%Y%m%d-%H%M%S}.wav"
+        ttk.Label(container, text="Nom du fichier:").grid(
+            row=1, column=0, sticky="e"
+        )
+        filename_var = tk.StringVar(value=default_name)
+        ttk.Entry(container, textvariable=filename_var, width=30).grid(
+            row=1, column=1, sticky="w", padx=(6, 0)
+        )
+
+        buttons = ttk.Frame(container)
+        buttons.grid(row=2, column=0, columnspan=2, pady=(12, 0))
+
+        result: Dict[str, object] = {}
+
+        def submit() -> None:
+            raw_duration = duration_var.get().replace(",", ".").strip()
+            try:
+                duration_value = float(raw_duration)
+            except ValueError:
+                messagebox.showerror("Erreur", "Durée invalide.", parent=dialog)
+                return
+
+            if duration_value <= 0:
+                messagebox.showerror(
+                    "Erreur", "La durée doit être supérieure à zéro.", parent=dialog
+                )
+                return
+
+            filename_value = filename_var.get().strip()
+            if not filename_value:
+                messagebox.showerror(
+                    "Erreur", "Indique un nom de fichier.", parent=dialog
+                )
+                return
+
+            filename_path = Path(filename_value)
+            if not filename_path.suffix:
+                filename_path = filename_path.with_suffix(".wav")
+
+            if filename_path.suffix.lower() != ".wav":
+                messagebox.showerror(
+                    "Erreur",
+                    "Seule l'extension .wav est supportée pour l'enregistrement.",
+                    parent=dialog,
+                )
+                return
+
+            result["duration"] = duration_value
+            result["filename"] = filename_path.name
+            dialog.destroy()
+
+        def cancel() -> None:
+            dialog.destroy()
+
+        ttk.Button(buttons, text="Annuler", command=cancel).pack(side=tk.RIGHT, padx=4)
+        ttk.Button(buttons, text="Enregistrer", command=submit).pack(side=tk.RIGHT)
+
+        dialog.bind("<Return>", lambda _event: submit())
+        dialog.bind("<Escape>", lambda _event: cancel())
+
+        container.grid_columnconfigure(1, weight=1)
+        dialog.wait_window(dialog)
+
+        if "duration" not in result:
+            return
+
+        duration = float(result["duration"])
+        filename = str(result["filename"])
+
+        audio_dir = idea.audio_dir()
+        audio_dir.mkdir(parents=True, exist_ok=True)
+        destination = audio_dir / filename
+
+        if destination.exists():
+            overwrite = messagebox.askyesno(
+                "Confirmer",
+                f"{filename} existe déjà. Écraser le fichier?",
+                parent=self,
+            )
+            if not overwrite:
+                return
+
+        def worker() -> None:
+            self.queue.put(("status", "Enregistrement audio…"))
+            try:
+                record_audio_to_file(destination, duration)
+            except AudioRecordingError as exc:
+                self.queue.put(("status", f"Erreur enregistrement: {exc}"))
+                return
+            except Exception as exc:  # pragma: no cover - défense supplémentaire
+                self.queue.put(("status", f"Erreur inattendue: {exc}"))
+                return
+
+            try:
+                idea.register_audio(destination)
+                idea.save()
+            except Exception as exc:  # pragma: no cover - accès disque
+                self.queue.put(("status", f"Audio enregistré mais erreur: {exc}"))
+                return
+
+            self.queue.put(("status", f"Audio enregistré: {destination.name}"))
+            self.queue.put(("refresh", None))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _transcribe_audio(self) -> None:
         if not self.selected_idea:
