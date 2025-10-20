@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 import queue
 import shutil
 import threading
@@ -29,6 +30,7 @@ from .models import (
 )
 from .services import (
     AudioRecordingError,
+    apply_analysis_payload,
     build_analysis_prompt,
     record_audio_to_file,
     transcribe_audio,
@@ -679,10 +681,15 @@ class KanbanIdeasApp(tk.Tk):
 
         idea.version = max(1, int(self.detail_version.get() or 1))
         idea.variant_of = self.detail_variant_of.get().strip()
+        analysis_content = self.analysis_text.get("1.0", tk.END)
+        warnings, _ = self._apply_analysis_json(idea, analysis_content)
         idea.save()
         write_text(idea.transcript_path(), self.transcript_text.get("1.0", tk.END))
-        write_text(idea.analysis_path(), self.analysis_text.get("1.0", tk.END))
-        self._set_status("Sauvegardé ✅")
+        write_text(idea.analysis_path(), analysis_content)
+        status = "Sauvegardé ✅"
+        if warnings:
+            status += " · " + " | ".join(warnings)
+        self._set_status(status)
         self._load_data()
 
     def _move_to_status_dialog(self) -> None:
@@ -1060,6 +1067,29 @@ class KanbanIdeasApp(tk.Tk):
 
         threading.Thread(target=worker, daemon=True).start()
 
+    def _apply_analysis_json(self, idea: Idea, raw_text: str) -> tuple[List[str], bool]:
+        """Parse *raw_text* as JSON and merge it into *idea* when possible."""
+
+        content = raw_text.strip()
+        if not content:
+            return [], False
+
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError as exc:
+            message = (
+                f"JSON invalide ignoré (ligne {exc.lineno}, colonne {exc.colno}: {exc.msg})"
+            )
+            return [message], False
+        except Exception as exc:  # pragma: no cover - défense supplémentaire
+            return [f"JSON invalide ignoré ({exc})"], False
+
+        if not isinstance(payload, dict):
+            return ["Analyse JSON ignorée (objet attendu)."], False
+
+        warnings = apply_analysis_payload(idea, payload)
+        return warnings, bool(payload)
+
     def _save_analysis(self) -> None:
         if not self.selected_idea:
             self._set_status("Sélectionne une idée d’abord.")
@@ -1067,8 +1097,20 @@ class KanbanIdeasApp(tk.Tk):
 
         idea = self.selected_idea
         content = self.analysis_text.get("1.0", tk.END)
+        warnings, applied = self._apply_analysis_json(idea, content)
+        if applied:
+            try:
+                idea.save()
+            except Exception as exc:  # pragma: no cover - accès disque
+                self._set_status(f"Erreur sauvegarde idée: {exc}")
+                return
         write_text(idea.analysis_path(), content)
-        self._set_status("Analyse sauvegardée ✅")
+        status = "Analyse sauvegardée ✅"
+        if warnings:
+            status += " · " + " | ".join(warnings)
+        self._set_status(status)
+        if applied:
+            self._load_data()
 
     def _copy_analysis_prompt(self) -> None:
         idea = self.selected_idea

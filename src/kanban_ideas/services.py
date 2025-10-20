@@ -8,20 +8,282 @@ import subprocess
 import wave
 from pathlib import Path
 from textwrap import indent
-from typing import Iterable, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
 from . import config
-from .models import Idea
+from .models import Idea, IdeaContext, TestRun
 from .storage import read_text
 
 try:  # Optional dependency loaded lazily to provide nicer error messages
     import sounddevice as sd  # type: ignore[import-not-found]
-except ImportError:  # pragma: no cover - handled at runtime
+except (ImportError, OSError):  # pragma: no cover - handled at runtime
     sd = None  # type: ignore[assignment]
 
 
 class AudioRecordingError(RuntimeError):
     """Raised when an audio recording cannot be completed."""
+
+
+def apply_analysis_payload(idea: Idea, payload: Dict[str, Any]) -> List[str]:
+    """Merge a GPT analysis *payload* into *idea*.
+
+    The expected schema is a JSON object structured as::
+
+        {
+            "idea": {
+                "title": "…",
+                "one_liner": "…",
+                "category": "…",
+                "tags": ["…"],
+                "purpose": "…",
+                "audience_hint": "…",
+                "success_criteria": "…",
+                "risks": ["…"],
+                "contexts": [
+                    {"label": "…", "channel": "IRL", "constraints": "…"},
+                    …
+                ],
+                "test_instructions": "…",
+                "next_test_context": "…",
+                "priority": "low|med|high",
+                "decision": "Keep|Tweak|Kill",
+                "rationale": "…",
+                "next_actions": ["…"],
+                "best_of": {
+                    "final_wording": "…",
+                    "delivery_tips": ["…"],
+                    "do_use_when": ["…"],
+                    "avoid_when": ["…"],
+                    "example_dialogues": ["…"]
+                }
+            },
+            "tests": [
+                {
+                    "date": "2024-05-01",
+                    "mode": "live (IRL)",
+                    "context_ref": "…",
+                    "partner_profile": "…",
+                    "version_used": "A",
+                    "outcome_score": 4,
+                    "signals": {"smile": 1, "fluidite": 3},
+                    "notes": "…",
+                    "micro_tweaks": ["…"],
+                    "evidence": ["…"],
+                    "run_decision": "keep|tweak|kill"
+                },
+                …
+            ]
+        }
+
+    The top-level ``"idea"`` object may also expose the recognised fields directly.
+    Unknown or invalid fields are ignored and warnings describing the reason are
+    returned. When no warnings are produced, the payload was applied fully.
+    """
+
+    warnings: List[str] = []
+
+    if not isinstance(payload, dict):
+        return ["Analyse JSON ignorée (objet attendu)."]
+
+    def _first_string_from_sources(
+        keys: Iterable[str],
+        *sources: Dict[str, Any] | None,
+        field_label: str,
+    ) -> str | None:
+        for source in sources:
+            if not isinstance(source, dict):
+                continue
+            for key in keys:
+                if key not in source:
+                    continue
+                value = source.get(key)
+                if isinstance(value, str):
+                    text = value.strip()
+                    if text:
+                        return text
+                elif value is not None:
+                    warnings.append(
+                        f"Champ '{field_label}' ignoré (texte attendu)."
+                    )
+                    return None
+        return None
+
+    def _extract_list_from_sources(
+        keys: Iterable[str],
+        *sources: Dict[str, Any] | None,
+        field_label: str,
+    ) -> List[str] | None:
+        for source in sources:
+            if not isinstance(source, dict):
+                continue
+            for key in keys:
+                if key not in source:
+                    continue
+                value = source.get(key)
+                if isinstance(value, list):
+                    return [
+                        str(item).strip() for item in value if str(item).strip()
+                    ]
+                if isinstance(value, str):
+                    return [
+                        line.strip() for line in value.splitlines() if line.strip()
+                    ]
+                warnings.append(
+                    f"Champ '{field_label}' ignoré (liste ou texte attendus)."
+                )
+                return None
+        return None
+
+    idea_section: Dict[str, Any] = {}
+    if isinstance(payload.get("idea"), dict):
+        idea_section = payload["idea"]  # type: ignore[assignment]
+    elif isinstance(payload.get("idea_summary"), dict):
+        idea_section = payload["idea_summary"]  # type: ignore[assignment]
+    else:
+        idea_section = {
+            key: value
+            for key, value in payload.items()
+            if key not in {"tests", "test_runs", "experiments"}
+        }
+
+    best_of_section = idea_section.get("best_of")
+    if not isinstance(best_of_section, dict):
+        fallback = idea_section.get("bestOf")
+        best_of_section = fallback if isinstance(fallback, dict) else None
+
+    string_fields = {
+        "title": ("title", "name"),
+        "one_liner": ("one_liner", "one-liner", "pitch"),
+        "category": ("category",),
+        "purpose": ("purpose", "objectif"),
+        "audience_hint": ("audience_hint", "audience", "cible"),
+        "success_criteria": ("success_criteria", "success"),
+        "test_instructions": ("test_instructions", "instructions"),
+        "next_test_context": ("next_test_context", "next_context"),
+        "priority": ("priority",),
+        "decision": ("decision", "idea_decision"),
+        "rationale": ("rationale", "analysis", "summary"),
+        "variant_of": ("variant_of",),
+    }
+
+    for attribute, keys in string_fields.items():
+        value = _first_string_from_sources(keys, idea_section, field_label=attribute)
+        if value is not None:
+            setattr(idea, attribute, value)
+
+    best_of_string_fields = {
+        "final_wording": ("final_wording", "best_of_final_wording"),
+    }
+    for attribute, keys in best_of_string_fields.items():
+        value = _first_string_from_sources(
+            keys,
+            idea_section,
+            best_of_section,
+            field_label=f"best_of.{attribute}",
+        )
+        if value is not None:
+            setattr(idea.best_of, attribute, value)
+
+    list_fields = {
+        "tags": ("tags",),
+        "risks": ("risks", "dangers"),
+        "next_actions": ("next_actions", "actions"),
+        "changelog": ("changelog",),
+    }
+
+    for attribute, keys in list_fields.items():
+        items = _extract_list_from_sources(
+            keys, idea_section, field_label=attribute
+        )
+        if items is not None:
+            setattr(idea, attribute, items)
+
+    best_of_list_fields = {
+        "delivery_tips": ("delivery_tips", "best_of_delivery_tips"),
+        "do_use_when": ("do_use_when", "best_of_do_use_when"),
+        "avoid_when": ("avoid_when", "best_of_avoid_when"),
+        "example_dialogues": (
+            "example_dialogues",
+            "best_of_example_dialogues",
+        ),
+    }
+
+    for attribute, keys in best_of_list_fields.items():
+        items = _extract_list_from_sources(
+            keys,
+            idea_section,
+            best_of_section,
+            field_label=f"best_of.{attribute}",
+        )
+        if items is not None:
+            setattr(idea.best_of, attribute, items)
+
+    contexts_payload = None
+    for key in ("contexts", "contextes"):
+        if key in idea_section:
+            contexts_payload = idea_section.get(key)
+            break
+    if contexts_payload is not None:
+        if isinstance(contexts_payload, list):
+            contexts: List[IdeaContext] = []
+            for entry in contexts_payload:
+                if isinstance(entry, dict):
+                    contexts.append(IdeaContext.from_dict(entry))
+                else:
+                    warnings.append(
+                        "Contexte ignoré (dictionnaire attendu)."
+                    )
+            if contexts:
+                idea.contexts = contexts
+        else:
+            warnings.append("Champ 'contexts' ignoré (liste attendue).")
+
+    tests_payload = None
+    for key in ("tests", "test_runs", "experiments"):
+        if key in payload:
+            tests_payload = payload.get(key)
+            break
+    if tests_payload is None:
+        for key in ("tests", "test_runs", "experiments"):
+            if key in idea_section:
+                tests_payload = idea_section.get(key)
+                break
+    if tests_payload is not None:
+        if isinstance(tests_payload, list):
+            runs: List[TestRun] = []
+            for entry in tests_payload:
+                if not isinstance(entry, dict):
+                    warnings.append(
+                        "Exécution de test ignorée (objet attendu)."
+                    )
+                    continue
+                run_payload: Dict[str, Any] = {
+                    "date": entry.get("date") or entry.get("when"),
+                    "mode": entry.get("mode"),
+                    "context_ref": entry.get("context_ref")
+                    or entry.get("context"),
+                    "partner_profile": entry.get("partner_profile")
+                    or entry.get("partner"),
+                    "version_used": entry.get("version_used")
+                    or entry.get("version"),
+                    "outcome_score": entry.get("outcome_score")
+                    or entry.get("score"),
+                    "signals": entry.get("signals"),
+                    "notes": entry.get("notes"),
+                    "evidence": entry.get("evidence") or [],
+                    "micro_tweaks": entry.get("micro_tweaks")
+                    or entry.get("tweaks")
+                    or [],
+                    "run_decision": entry.get("run_decision")
+                    or entry.get("decision"),
+                }
+                runs.append(TestRun.from_dict(run_payload))
+            if runs:
+                idea.test_runs = runs
+        else:
+            warnings.append("Section 'tests' ignorée (liste attendue).")
+
+    return warnings
 
 
 def record_audio_to_file(
