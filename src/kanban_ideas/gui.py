@@ -32,7 +32,7 @@ from .services import (
     AudioRecordingError,
     apply_analysis_payload,
     build_analysis_prompt,
-    record_audio_to_file,
+    record_audio_until_stop,
     transcribe_audio,
 )
 from .storage import load_all_ideas, read_text, write_text
@@ -101,6 +101,16 @@ class KanbanIdeasApp(tk.Tk):
         self.test_detail_evidence: tk.Text | None = None
 
         self.queue: "queue.Queue[tuple[str, object]]" = queue.Queue()
+
+        self.recording_active = False
+        self.record_button: ttk.Button | None = None
+        self.record_timer_var = tk.StringVar(value="")
+        self._record_timer_job: str | None = None
+        self._recording_thread: threading.Thread | None = None
+        self._recording_stop_event: threading.Event | None = None
+        self._recording_destination: Path | None = None
+        self._recording_start_time: dt.datetime | None = None
+        self._recording_idea_id: Optional[str] = None
 
         self._build_ui()
         self._load_data()
@@ -209,8 +219,12 @@ class KanbanIdeasApp(tk.Tk):
         ttk.Button(buttons, text="🎧 Ajouter audio…", command=self._add_audio).pack(
             side=tk.LEFT
         )
-        ttk.Button(buttons, text="● Enregistrer", command=self._record_audio).pack(
-            side=tk.LEFT, padx=6
+        self.record_button = ttk.Button(
+            buttons, text="● Enregistrer", command=self._record_audio
+        )
+        self.record_button.pack(side=tk.LEFT, padx=6)
+        ttk.Label(buttons, textvariable=self.record_timer_var, width=10).pack(
+            side=tk.LEFT, padx=(0, 6)
         )
         ttk.Button(buttons, text="📝 Transcrire", command=self._transcribe_audio).pack(
             side=tk.LEFT, padx=6
@@ -918,127 +932,141 @@ class KanbanIdeasApp(tk.Tk):
 
         idea = self.selected_idea
 
-        dialog = tk.Toplevel(self)
-        dialog.title("Nouvel enregistrement audio")
-        dialog.transient(self)
-        dialog.grab_set()
-        dialog.resizable(False, False)
-
-        container = ttk.Frame(dialog, padding=10)
-        container.grid(row=0, column=0)
-
-        ttk.Label(container, text="Durée max (secondes):").grid(
-            row=0, column=0, sticky="e", pady=(0, 6)
-        )
-        duration_var = tk.StringVar(value="60")
-        ttk.Entry(container, textvariable=duration_var, width=12).grid(
-            row=0, column=1, sticky="w", padx=(6, 0), pady=(0, 6)
-        )
-
-        default_name = f"enregistrement-{dt.datetime.now():%Y%m%d-%H%M%S}.wav"
-        ttk.Label(container, text="Nom du fichier:").grid(
-            row=1, column=0, sticky="e"
-        )
-        filename_var = tk.StringVar(value=default_name)
-        ttk.Entry(container, textvariable=filename_var, width=30).grid(
-            row=1, column=1, sticky="w", padx=(6, 0)
-        )
-
-        buttons = ttk.Frame(container)
-        buttons.grid(row=2, column=0, columnspan=2, pady=(12, 0))
-
-        result: Dict[str, object] = {}
-
-        def submit() -> None:
-            raw_duration = duration_var.get().replace(",", ".").strip()
-            try:
-                duration_value = float(raw_duration)
-            except ValueError:
-                messagebox.showerror("Erreur", "Durée invalide.", parent=dialog)
-                return
-
-            if duration_value <= 0:
-                messagebox.showerror(
-                    "Erreur", "La durée doit être supérieure à zéro.", parent=dialog
-                )
-                return
-
-            filename_value = filename_var.get().strip()
-            if not filename_value:
-                messagebox.showerror(
-                    "Erreur", "Indique un nom de fichier.", parent=dialog
-                )
-                return
-
-            filename_path = Path(filename_value)
-            if not filename_path.suffix:
-                filename_path = filename_path.with_suffix(".wav")
-
-            if filename_path.suffix.lower() != ".wav":
-                messagebox.showerror(
-                    "Erreur",
-                    "Seule l'extension .wav est supportée pour l'enregistrement.",
-                    parent=dialog,
-                )
-                return
-
-            result["duration"] = duration_value
-            result["filename"] = filename_path.name
-            dialog.destroy()
-
-        def cancel() -> None:
-            dialog.destroy()
-
-        ttk.Button(buttons, text="Annuler", command=cancel).pack(side=tk.RIGHT, padx=4)
-        ttk.Button(buttons, text="Enregistrer", command=submit).pack(side=tk.RIGHT)
-
-        dialog.bind("<Return>", lambda _event: submit())
-        dialog.bind("<Escape>", lambda _event: cancel())
-
-        container.grid_columnconfigure(1, weight=1)
-        dialog.wait_window(dialog)
-
-        if "duration" not in result:
+        if self.recording_active:
+            self._stop_recording()
             return
 
-        duration = float(result["duration"])
-        filename = str(result["filename"])
+        self._start_recording(idea)
 
+    def _start_recording(self, idea: Idea) -> None:
         audio_dir = idea.audio_dir()
-        audio_dir.mkdir(parents=True, exist_ok=True)
-        destination = audio_dir / filename
-
-        if destination.exists():
-            overwrite = messagebox.askyesno(
-                "Confirmer",
-                f"{filename} existe déjà. Écraser le fichier?",
+        try:
+            audio_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            messagebox.showerror(
+                "Erreur",
+                f"Impossible de préparer le dossier audio: {exc}",
                 parent=self,
             )
-            if not overwrite:
-                return
+            return
 
-        def worker() -> None:
-            self.queue.put(("status", "Enregistrement audio…"))
-            try:
-                record_audio_to_file(destination, duration)
-            except AudioRecordingError as exc:
-                self.queue.put(("status", f"Erreur enregistrement: {exc}"))
-                return
-            except Exception as exc:  # pragma: no cover - défense supplémentaire
-                self.queue.put(("status", f"Erreur inattendue: {exc}"))
-                return
+        timestamp = dt.datetime.now()
+        base_name = f"enregistrement-{timestamp:%Y%m%d-%H%M%S}"
+        destination = audio_dir / f"{base_name}.wav"
+        suffix = 1
+        while destination.exists():
+            destination = audio_dir / f"{base_name}-{suffix}.wav"
+            suffix += 1
 
-            try:
-                idea.register_audio(destination)
-                idea.save()
-            except Exception as exc:  # pragma: no cover - accès disque
-                self.queue.put(("status", f"Audio enregistré mais erreur: {exc}"))
-                return
+        stop_event = threading.Event()
 
-            self.queue.put(("status", f"Audio enregistré: {destination.name}"))
-            self.queue.put(("refresh", None))
+        self.recording_active = True
+        self._recording_stop_event = stop_event
+        self._recording_destination = destination
+        self._recording_start_time = dt.datetime.now()
+        self._recording_idea_id = idea.id
 
-        threading.Thread(target=worker, daemon=True).start()
+        if self.record_button:
+            self.record_button.config(text="■ Fin d'enregistrement", state=tk.NORMAL)
+
+        if self._record_timer_job:
+            self.after_cancel(self._record_timer_job)
+            self._record_timer_job = None
+        self.record_timer_var.set("⏱ 00:00")
+        self._update_record_timer()
+
+        self._set_status("Enregistrement en cours…")
+
+        thread = threading.Thread(
+            target=self._record_audio_worker,
+            args=(idea, destination, stop_event),
+            daemon=True,
+        )
+        self._recording_thread = thread
+        thread.start()
+
+    def _stop_recording(self) -> None:
+        if not self.recording_active:
+            return
+
+        if self.record_button:
+            self.record_button.config(state=tk.DISABLED)
+
+        if self._recording_stop_event:
+            self._recording_stop_event.set()
+
+        self._set_status("Finalisation de l'enregistrement…")
+
+    def _record_audio_worker(
+        self,
+        idea: Idea,
+        destination: Path,
+        stop_event: threading.Event,
+    ) -> None:
+        try:
+            record_audio_until_stop(destination, stop_event)
+        except AudioRecordingError as exc:
+            payload = {
+                "status": f"Erreur enregistrement: {exc}",
+                "refresh": False,
+                "idea_id": idea.id,
+            }
+            self.queue.put(("recording_finished", payload))
+            return
+        except Exception as exc:  # pragma: no cover - défense supplémentaire
+            payload = {
+                "status": f"Erreur inattendue: {exc}",
+                "refresh": False,
+                "idea_id": idea.id,
+            }
+            self.queue.put(("recording_finished", payload))
+            return
+
+        try:
+            idea.register_audio(destination)
+            idea.save()
+        except Exception as exc:  # pragma: no cover - accès disque
+            payload = {
+                "status": f"Audio enregistré mais erreur: {exc}",
+                "refresh": False,
+                "idea_id": idea.id,
+            }
+            self.queue.put(("recording_finished", payload))
+            return
+
+        payload = {
+            "status": f"Audio enregistré: {destination.name}",
+            "refresh": True,
+            "idea_id": idea.id,
+        }
+        self.queue.put(("recording_finished", payload))
+
+    def _finalize_recording_state(self) -> None:
+        if self._record_timer_job:
+            self.after_cancel(self._record_timer_job)
+            self._record_timer_job = None
+        self.record_timer_var.set("")
+
+        self.recording_active = False
+        self._recording_thread = None
+        self._recording_stop_event = None
+        self._recording_destination = None
+        self._recording_start_time = None
+        self._recording_idea_id = None
+
+        if self.record_button:
+            self.record_button.config(text="● Enregistrer", state=tk.NORMAL)
+
+    def _update_record_timer(self) -> None:
+        if not self.recording_active or not self._recording_start_time:
+            self._record_timer_job = None
+            return
+
+        elapsed = dt.datetime.now() - self._recording_start_time
+        total_seconds = max(0, int(elapsed.total_seconds()))
+        minutes, seconds = divmod(total_seconds, 60)
+        self.record_timer_var.set(f"⏱ {minutes:02d}:{seconds:02d}")
+        self._record_timer_job = self.after(200, self._update_record_timer)
 
     def _transcribe_audio(self) -> None:
         if not self.selected_idea:
@@ -1120,6 +1148,25 @@ class KanbanIdeasApp(tk.Tk):
         self.clipboard_append(prompt)
         self._set_status("Prompt d’analyse copié ✅")
 
+    def _on_recording_finished(self, payload: Dict[str, object]) -> None:
+        idea_id_obj = payload.get("idea_id")
+        idea_id = idea_id_obj if isinstance(idea_id_obj, str) else self._recording_idea_id
+        status = str(payload.get("status") or "")
+        refresh = bool(payload.get("refresh"))
+
+        self._finalize_recording_state()
+
+        if status:
+            self._set_status(status)
+
+        if refresh:
+            self._load_data()
+            if idea_id:
+                for idea in self.ideas:
+                    if idea.id == idea_id:
+                        self._open_idea(idea)
+                        break
+
     # ------------------------------------------------------------------
     # BACKGROUND QUEUE
     # ------------------------------------------------------------------
@@ -1132,6 +1179,9 @@ class KanbanIdeasApp(tk.Tk):
                 elif kind == "transcript":
                     self.transcript_text.delete("1.0", tk.END)
                     self.transcript_text.insert("1.0", str(payload))
+                elif kind == "recording_finished":
+                    details = payload if isinstance(payload, dict) else {}
+                    self._on_recording_finished(details)
                 elif kind == "refresh":
                     self._load_data()
         except queue.Empty:
