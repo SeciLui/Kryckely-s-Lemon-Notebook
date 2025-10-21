@@ -48,6 +48,10 @@ suivante :
         └── *.wav|*.mp3  # Fichiers audio copiés dans le workspace
 ```
 
+Pour stocker les idées dans un autre emplacement, définissez la variable
+d’environnement `KANBAN_IDEAS_WORKSPACE` (voir `.env.example`). L’application
+créera automatiquement le dossier si besoin.
+
 ## Prérequis
 
 * Python 3.10 ou supérieur
@@ -110,6 +114,10 @@ variables d’environnement suivantes :
 Les chemins relatifs sont résolus depuis le répertoire courant, la racine du projet
 ou `data/`. Vous pouvez également ajuster la liste des statuts ou le titre de
 l’application dans `src/kanban_ideas/config.py`.
+
+Un fichier `.env.example` est fourni pour centraliser ces variables ; copiez-le en
+`.env` et ajustez les chemins/valeurs selon votre environnement avant de lancer
+l’application.
 
 ## Tests
 
