@@ -8,7 +8,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 _PACKAGE_ROOT = Path(__file__).resolve().parent
-load_dotenv(_PACKAGE_ROOT.parent / ".env")
+_PROJECT_ROOT = _PACKAGE_ROOT.parent.parent
+load_dotenv(_PROJECT_ROOT / ".env")
 
 from .app import main
 
