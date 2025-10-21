@@ -3,6 +3,12 @@
 from __future__ import annotations
 
 from importlib import metadata
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+_PACKAGE_ROOT = Path(__file__).resolve().parent
+load_dotenv(_PACKAGE_ROOT.parent / ".env")
 
 from .app import main
 
