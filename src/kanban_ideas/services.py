@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import shutil
 import subprocess
+import threading
 import wave
 from pathlib import Path
 from textwrap import indent
@@ -286,66 +287,94 @@ def apply_analysis_payload(idea: Idea, payload: Dict[str, Any]) -> List[str]:
     return warnings
 
 
-def record_audio_to_file(
+def record_audio_until_stop(
     destination: Path,
-    duration_seconds: float,
+    stop_signal: threading.Event,
     *,
     sample_rate: int = 44_100,
     channels: int = 1,
+    chunk_frames: int = 1_024,
 ) -> Path:
-    """Record audio from the default input and write a WAV file.
-
-    Parameters
-    ----------
-    destination:
-        Target file path where the recording should be written.
-    duration_seconds:
-        Maximum duration of the recording in seconds.
-    sample_rate:
-        Sampling rate used for the capture (defaults to 44.1 kHz).
-    channels:
-        Number of channels to record. ``1`` captures mono audio.
-
-    Returns
-    -------
-    pathlib.Path
-        The *destination* path once the file has been created.
-    """
-
-    if duration_seconds <= 0:
-        raise AudioRecordingError("La durée doit être positive.")
+    """Record audio until *stop_signal* is set and persist it as a WAV file."""
 
     if sd is None:
         raise AudioRecordingError(
             "La bibliothèque sounddevice n'est pas installée."
         )
 
-    frames = int(duration_seconds * sample_rate)
-
-    try:
-        recording = sd.rec(  # type: ignore[call-arg]
-            frames,
-            samplerate=sample_rate,
-            channels=channels,
-            dtype="int16",
-        )
-        sd.wait()  # type: ignore[call-arg]
-    except Exception as exc:  # pragma: no cover - interacts with hardware
-        raise AudioRecordingError(str(exc)) from exc
+    if chunk_frames <= 0:
+        raise AudioRecordingError("La taille des blocs d'enregistrement doit être positive.")
 
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:  # pragma: no cover - filesystem errors
+        raise AudioRecordingError(
+            f"Impossible de préparer le dossier d'enregistrement: {exc}"
+        ) from exc
+
+    try:
         with wave.open(str(destination), "wb") as handle:
             handle.setnchannels(channels)
             handle.setsampwidth(2)  # 16-bit samples
             handle.setframerate(sample_rate)
-            handle.writeframes(recording.tobytes())
+
+            try:
+                with sd.InputStream(  # type: ignore[attr-defined]
+                    samplerate=sample_rate,
+                    channels=channels,
+                    dtype="int16",
+                ) as stream:
+                    while not stop_signal.is_set():
+                        data, _ = stream.read(chunk_frames)
+                        handle.writeframes(data.tobytes())
+            except Exception as exc:  # pragma: no cover - interacts with hardware
+                raise AudioRecordingError(str(exc)) from exc
+    except AudioRecordingError:
+        if destination.exists():
+            try:
+                destination.unlink()
+            except OSError:
+                pass
+        raise
     except Exception as exc:  # pragma: no cover - filesystem errors
+        if destination.exists():
+            try:
+                destination.unlink()
+            except OSError:
+                pass
         raise AudioRecordingError(
             f"Impossible d'écrire le fichier audio: {exc}"
         ) from exc
 
     return destination
+
+
+def record_audio_to_file(
+    destination: Path,
+    duration_seconds: float,
+    *,
+    sample_rate: int = 44_100,
+    channels: int = 1,
+    chunk_frames: int = 1_024,
+) -> Path:
+    """Record audio for a fixed duration and persist it as a WAV file."""
+
+    if duration_seconds <= 0:
+        raise AudioRecordingError("La durée doit être positive.")
+
+    stop_signal = threading.Event()
+    timer = threading.Timer(duration_seconds, stop_signal.set)
+    timer.start()
+    try:
+        return record_audio_until_stop(
+            destination,
+            stop_signal,
+            sample_rate=sample_rate,
+            channels=channels,
+            chunk_frames=chunk_frames,
+        )
+    finally:
+        timer.cancel()
 
 
 def run_subprocess(command: Sequence[str]) -> Tuple[int, str, str]:
