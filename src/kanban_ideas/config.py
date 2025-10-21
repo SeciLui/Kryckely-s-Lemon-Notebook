@@ -23,6 +23,7 @@ STATUSES: Final[list[str]] = [
 
 TRANSCRIBE_COMMAND_TEMPLATE: Final[list[str]] = [
     "vibe",
+    "transcribe",
     "--input",
     "{input}",
     "--output",

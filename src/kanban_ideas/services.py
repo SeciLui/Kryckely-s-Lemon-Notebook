@@ -399,7 +399,19 @@ def run_subprocess(command: Sequence[str]) -> Tuple[int, str, str]:
 def transcribe_audio(audio_path: Path, transcript_out: Path) -> Tuple[bool, str]:
     """Transcribe *audio_path* using the configured CLI template."""
 
-    command = [part.format(input=str(audio_path), output=str(transcript_out)) for part in config.TRANSCRIBE_COMMAND_TEMPLATE]
+    transcript_out.parent.mkdir(parents=True, exist_ok=True)
+
+    template = list(config.TRANSCRIBE_COMMAND_TEMPLATE)
+    if template and template[0] == "vibe":
+        # "vibe" expects the subcommand before any flag arguments.
+        insert_index = 1 if len(template) == 1 or template[1].startswith("--") else None
+        if insert_index is not None:
+            template = template[:insert_index] + ["transcribe"] + template[insert_index:]
+
+    command = [
+        part.format(input=str(audio_path), output=str(transcript_out))
+        for part in template
+    ]
     code, stdout, stderr = run_subprocess(command)
     if code != 0:
         message = stderr.strip() or stdout.strip() or "Erreur de transcription."
