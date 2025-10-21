@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import datetime as dt
+import os
 import shutil
 import subprocess
 import threading
 import wave
 from pathlib import Path
 from textwrap import indent
-from typing import Any, Dict, Iterable, List, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
 
 from . import config
 from .models import Idea, IdeaContext, TestRun
@@ -377,37 +378,110 @@ def record_audio_to_file(
         timer.cancel()
 
 
-def run_subprocess(command: Sequence[str]) -> Tuple[int, str, str]:
-    """Execute *command* and return ``(returncode, stdout, stderr)``."""
+def _resolve_vibe_executable() -> str | None:
+    """Return the path to the Vibe CLI binary when available."""
 
-    try:
-        process = subprocess.Popen(
-            list(command),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            universal_newlines=True,
-        )
-    except FileNotFoundError as exc:
-        return 127, "", f"Commande introuvable: {exc.filename}"
-    except Exception as exc:  # pragma: no cover - defensive fallback
-        return 1, "", str(exc)
+    candidate = os.environ.get("VIBE_CLI", "vibe")
+    candidate = os.path.expanduser(candidate)
+    if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+        return candidate
+    found = shutil.which(candidate)
+    return found
 
-    stdout, stderr = process.communicate()
-    return process.returncode, stdout, stderr
+
+def _resolve_vibe_model_path() -> Path | None:
+    """Return the configured Whisper model file for Vibe when available."""
+
+    candidate = os.environ.get("VIBE_MODEL_PATH")
+    if not candidate:
+        return None
+
+    expanded = os.path.expanduser(candidate)
+    path = Path(expanded)
+    if path.is_file():
+        return path
+
+    if not path.is_absolute():
+        for base in (Path.cwd(), config.PROJECT_ROOT, config.DATA_ROOT):
+            alt = base / candidate
+            if alt.is_file():
+                return alt
+
+    return None
 
 
 def transcribe_audio(audio_path: Path, transcript_out: Path) -> Tuple[bool, str]:
-    """Transcribe *audio_path* using the configured CLI template."""
+    """Transcribe *audio_path* using the Vibe CLI."""
 
     transcript_out.parent.mkdir(parents=True, exist_ok=True)
 
-    command = [
-        part.format(input=str(audio_path), output=str(transcript_out))
-        for part in config.TRANSCRIBE_COMMAND_TEMPLATE
+    executable = _resolve_vibe_executable()
+    if not executable:
+        return (
+            False,
+            "Impossible de trouver le binaire 'vibe'. Configure VIBE_CLI ou ajoute-le au PATH.",
+        )
+
+    model_path = _resolve_vibe_model_path()
+    if not model_path:
+        return (
+            False,
+            "Modèle Whisper introuvable. Définis VIBE_MODEL_PATH vers un fichier .bin téléchargé depuis Vibe.",
+        )
+
+    language = os.environ.get("VIBE_LANGUAGE", "french")
+    threads_env = os.environ.get("VIBE_THREADS")
+    threads: int | None = None
+    if threads_env:
+        try:
+            threads = int(threads_env)
+        except (TypeError, ValueError):  # pragma: no cover - defensive parsing
+            threads = None
+
+    command: list[str] = [
+        executable,
+        "--file",
+        str(audio_path),
+        "--model",
+        str(model_path),
+        "--format",
+        "txt",
+        "--write",
+        str(transcript_out),
+        "--language",
+        language,
     ]
-    code, stdout, stderr = run_subprocess(command)
-    if code != 0:
-        message = stderr.strip() or stdout.strip() or "Erreur de transcription."
+
+    if threads:
+        command.extend(["--n-threads", str(threads)])
+
+    temperature = os.environ.get("VIBE_TEMPERATURE")
+    if temperature:
+        command.extend(["--temperature", temperature])
+
+    env = os.environ.copy()
+    env.setdefault("NO_COLOR", "1")
+
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
+    except FileNotFoundError:
+        return (
+            False,
+            "Impossible de lancer Vibe. Vérifie la configuration de VIBE_CLI.",
+        )
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        return False, f"Échec du démarrage de Vibe: {exc}"
+
+    if result.returncode != 0:
+        message = result.stderr.strip() or result.stdout.strip()
+        if not message:
+            message = f"Transcription interrompue avec le code de sortie {result.returncode}."
         return False, message
 
     if not transcript_out.exists():
@@ -418,7 +492,7 @@ def transcribe_audio(audio_path: Path, transcript_out: Path) -> Tuple[bool, str]
                 break
 
     if transcript_out.exists():
-        message = stdout.strip() or "Transcription terminée."
+        message = result.stdout.strip() or "Transcription terminée."
         return True, message
     return False, f"Impossible de trouver {transcript_out}"
 

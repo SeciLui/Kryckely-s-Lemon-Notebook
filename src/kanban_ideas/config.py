@@ -21,10 +21,3 @@ STATUSES: Final[list[str]] = [
     "Kill",
 ]
 
-TRANSCRIBE_COMMAND_TEMPLATE: Final[list[str]] = [
-    "vibe",
-    "--input",
-    "{input}",
-    "--output",
-    "{output}",
-]
