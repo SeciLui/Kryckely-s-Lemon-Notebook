@@ -9,7 +9,9 @@ description = "Tableau Kanban Tkinter pour organiser des idées audio."
 readme = "README.md"
 authors = [{ name = "Kevin", email = "kevin@example.com" }]
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "sounddevice>=0.4",
+]
 
 [project.optional-dependencies]
 dev = ["invoke>=2.2"]

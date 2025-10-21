@@ -48,6 +48,10 @@ suivante :
         └── *.wav|*.mp3  # Fichiers audio copiés dans le workspace
 ```
 
+Pour stocker les idées dans un autre emplacement, définissez la variable
+d’environnement `KANBAN_IDEAS_WORKSPACE` (voir `.env.example`). L’application
+créera automatiquement le dossier si besoin.
+
 ## Prérequis
 
 * Python 3.10 ou supérieur
@@ -86,8 +90,8 @@ kanban-ideas --spec-report --spec-report-format stats  # Tableau de bord agrég�
   dialogues d’exemple).
 * **Import audio** : ajoutez un ou plusieurs fichiers audio qui seront copiés dans
   le workspace de l’idée.
-* **Transcription** : déclenchez un outil externe (configuré dans `config.py`) pour
-  transcrire le dernier audio importé.
+* **Transcription** : déclenchez Vibe pour transcrire le dernier audio importé
+  (pensez à configurer les variables d’environnement décrites ci-dessous).
 * **Analyse manuelle** : saisissez vos conclusions directement dans l’onglet Analyse
   et sauvegardez-les localement (aucun appel OpenAI n’est effectué).
 * **Recherche** : filtrez les idées via la barre de recherche qui balaye titres,
@@ -95,9 +99,25 @@ kanban-ideas --spec-report --spec-report-format stats  # Tableau de bord agrég�
 
 ## Personnalisation
 
-Modifiez `TRANSCRIBE_COMMAND_TEMPLATE` dans `config.py` pour adapter la commande CLI
-à votre outil de transcription. Vous pouvez également ajuster la liste des statuts
-ou le titre de l’application dans ce même fichier.
+### Transcription avec Vibe
+
+L’application attend la CLI Vibe et un modèle Whisper compatible. Configurez les
+variables d’environnement suivantes :
+
+* `VIBE_CLI` : chemin vers l’exécutable `vibe` (optionnel si présent dans le `PATH`).
+* `VIBE_MODEL_PATH` : chemin (absolu ou relatif) vers le fichier `.bin` du modèle
+  Whisper téléchargé via Vibe.
+* `VIBE_LANGUAGE` : langue cible (par défaut : `french`).
+* `VIBE_THREADS` : nombre de threads à utiliser (optionnel).
+* `VIBE_TEMPERATURE` : température appliquée lors de la transcription (optionnel).
+
+Les chemins relatifs sont résolus depuis le répertoire courant, la racine du projet
+ou `data/`. Vous pouvez également ajuster la liste des statuts ou le titre de
+l’application dans `src/kanban_ideas/config.py`.
+
+Un fichier `.env.example` est fourni pour centraliser ces variables ; copiez-le en
+`.env` et ajustez les chemins/valeurs selon votre environnement avant de lancer
+l’application.
 
 ## Tests
 
